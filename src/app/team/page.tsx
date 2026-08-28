@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDb } from "@/lib/db";
 import { logout } from "../login/actions";
 import TeamClient, { type Player } from "./TeamClient";
@@ -18,16 +19,24 @@ export default async function TeamPage() {
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
         <div>
           <h1 className="text-lg font-semibold">SVKT Taktikboard</h1>
-          <p className="text-sm text-slate-400">Team &amp; Kader</p>
+          <p className="text-sm text-slate-400">Team &amp; Kader (einfache Liste)</p>
         </div>
-        <form action={logout}>
-          <button
-            type="submit"
+        <div className="flex items-center gap-3">
+          <Link
+            href="/taktik"
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-50"
           >
-            Abmelden
-          </button>
-        </form>
+            Zum Taktiktafel-Editor
+          </Link>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-50"
+            >
+              Abmelden
+            </button>
+          </form>
+        </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8">

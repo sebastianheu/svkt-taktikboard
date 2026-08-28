@@ -44,6 +44,29 @@ async function ensureSchema(sql: ReturnType<typeof getSql>) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  // Bibliothek (gespeicherte Taktiken/Situationen inkl. optionalem GIF) und
+  // Ordner aus dem bisherigen Taktiktafel-Editor: dort war das jeweils ein
+  // einziges JSON-Array in localStorage. Statt das Datenmodell aufzubrechen,
+  // wird die exakt gleiche Struktur 1:1 als JSONB-Blob übernommen (`data`
+  // enthaelt das komplette Eintrags-Objekt inkl. id) -- so bleibt praktisch
+  // der gesamte Alt-Code (Rendering, Bearbeiten, GIF-Export) unveraendert,
+  // nur das Laden/Speichern wechselt von localStorage auf diese Tabellen.
+  await sql`
+    CREATE TABLE IF NOT EXISTS library_entries (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS library_folders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
   migrated = true;
 }
 
