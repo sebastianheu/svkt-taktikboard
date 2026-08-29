@@ -1755,7 +1755,10 @@
         <div id="rosterImportStatus" class="hint hidden" style="color:var(--danger); margin-top:8px;"></div>
       </section>
       <section class="panel" id="rosterListPanel">
-        <h2 class="panel-title">Kader (<span id="rosterCount">0</span>)</h2>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px;">
+          <h2 class="panel-title" style="margin-bottom:0;">Kaderliste (<span id="rosterCount">0</span>)</h2>
+          <button id="rosterDeleteAllBtn" type="button" class="btn btn-ghost btn-sm" title="Alle Spieler:innen aus der Kaderliste entfernen">Alle löschen</button>
+        </div>
         <div id="rosterEmpty" class="hint">Noch keine Spieler:innen angelegt.</div>
         <div id="rosterTableWrap" class="roster-table-wrap hidden">
           <table class="roster-table">
@@ -3155,6 +3158,7 @@
   const rosterSaveBtn = document.getElementById('rosterSaveBtn');
   const rosterCancelEditBtn = document.getElementById('rosterCancelEditBtn');
   const rosterCount = document.getElementById('rosterCount');
+  const rosterDeleteAllBtn = document.getElementById('rosterDeleteAllBtn');
   const rosterEmpty = document.getElementById('rosterEmpty');
   const rosterTableWrap = document.getElementById('rosterTableWrap');
   const rosterTableBody = document.getElementById('rosterTableBody');
@@ -3657,8 +3661,29 @@
     if (editingRosterId === id) clearRosterForm();
   }
 
+  function deleteAllRosterEntries() {
+    roster = [];
+    persistRoster();
+    renderRosterList();
+    renderRosterQuickList();
+    clearRosterForm();
+  }
+
+  rosterDeleteAllBtn.addEventListener('click', async () => {
+    if (roster.length === 0) return;
+    const confirmed = await confirmModal({
+      title: 'Kaderliste vollständig löschen?',
+      text: `Alle ${roster.length} Spieler:innen werden endgültig aus der Kaderliste entfernt. Bereits auf dem Feld platzierte Spielericons bleiben davon unberührt — nur die Verknüpfung zum Kader geht verloren. Dies kann nicht rückgängig gemacht werden.`,
+      confirmLabel: 'Alle löschen',
+      cancelLabel: 'Abbrechen',
+    });
+    if (!confirmed) return;
+    deleteAllRosterEntries();
+  });
+
   function renderRosterList() {
     rosterCount.textContent = String(roster.length);
+    rosterDeleteAllBtn.disabled = roster.length === 0;
     if (roster.length === 0) {
       rosterEmpty.classList.remove('hidden');
       rosterTableWrap.classList.add('hidden');
