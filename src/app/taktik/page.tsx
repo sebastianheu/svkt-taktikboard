@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { logout } from "../login/actions";
 
 // Bettet den bisherigen (jetzt server-persistenten) Taktiktafel-Editor per
 // iframe ein. Das isoliert dessen eigenes CSS/JS vollstaendig vom Rest der
@@ -6,6 +6,11 @@ import Link from "next/link";
 // globals.css) -- der Editor laeuft exakt so wie zuvor als eigenstaendige
 // Seite, nur dass seine Daten jetzt aus Postgres statt aus localStorage
 // kommen.
+//
+// Die frühere separate "/team"-Kaderliste wurde entfernt: der Team-Tab
+// im Editor deckt denselben Datensatz (Tabelle "players") vollstaendig
+// ab und zusaetzlich CSV/Excel-Import sowie Drag&Drop aufs Spielfeld --
+// die einfache Liste war damit eine reine Teilmenge ohne eigenen Nutzen.
 export default function TaktikPage() {
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -22,9 +27,22 @@ export default function TaktikPage() {
         }}
       >
         <strong>SVKT Taktikboard</strong>
-        <Link href="/team" style={{ color: "#f8fafc", textDecoration: "underline" }}>
-          Einfache Kaderliste
-        </Link>
+        <form action={logout}>
+          <button
+            type="submit"
+            style={{
+              color: "#f8fafc",
+              background: "transparent",
+              border: "1px solid #334155",
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Abmelden
+          </button>
+        </form>
       </div>
       <iframe
         src="/taktik-app"

@@ -32,7 +32,7 @@ export async function login(formData: FormData) {
     maxAge: 60 * 60 * 24 * 365,
   });
 
-  redirect("/team");
+  redirect("/taktik");
 }
 
 export async function logout() {
