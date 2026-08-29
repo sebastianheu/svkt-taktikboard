@@ -1216,6 +1216,9 @@
         <button id="redoBtn" type="button" class="icon-btn" title="Wiederholen (Strg+Umschalt+Z)" aria-label="Wiederholen" disabled></button>
       </div>
       <button id="clearBtn" class="btn btn-accent btn-hero" title="Alles zurücksetzen und mit einer leeren Situation neu beginnen">Neue Taktik</button>
+      <form action="/api/logout" method="post" target="_top">
+        <button type="submit" class="btn btn-ghost" title="Abmelden">Abmelden</button>
+      </form>
     </div>
   </header>
 
@@ -1744,7 +1747,7 @@
       </section>
       <section class="panel" id="rosterImportPanel">
         <h2 class="panel-title">Kader aus Datei importieren</h2>
-        <div class="hint">CSV- oder Excel-Datei (.xlsx) mit deinem Kader hochladen. Im nächsten Schritt kannst du in einer Vorschau festlegen, welche Spalte der Datei zu welchem Feld (Vorname, Nachname, Spitzname, Position 1, Geburtsdatum, Trikotnummer, Kürzel) gehört, bevor irgendetwas übernommen wird. Position 2 lässt sich beim Import nicht zuordnen und kann danach im Kader manuell ergänzt werden.</div>
+        <div class="hint">CSV- oder Excel-Datei (.xlsx) mit deinem Kader hochladen. Im nächsten Schritt kannst du in einer Vorschau festlegen, welche Spalte der Datei zu welchem Feld (Vorname, Nachname, Spitzname, Position 1, Position 2, Geburtsdatum, Trikotnummer, Kürzel) gehört, bevor irgendetwas übernommen wird.</div>
         <div class="roster-import-row">
           <button type="button" class="btn btn-ghost" id="rosterImportBtn">Datei auswählen…</button>
           <input type="file" id="rosterImportFile" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
@@ -3868,17 +3871,17 @@
      .xls) und nur das erste Tabellenblatt der Datei.
      ============================================================ */
 
-  // 'position' → position1: nur EINE Position lässt sich beim Import
-  // zuordnen (Position 2 danach im Kader manuell ergänzbar, siehe Hinweis
-  // im Import-Panel). Der Wert wird nur übernommen, wenn er exakt einem
-  // der acht Kürzel (TW/AV/IV/DM/ZM/OM/FL/ST) entspricht — sonst bleibt
-  // position1 leer, statt einen unpassenden Freitext hineinzuschreiben.
+  // Der Wert von 'position'/'position2' wird nur übernommen, wenn er exakt
+  // einem der acht Kürzel (TW/AV/IV/DM/ZM/OM/FL/ST) entspricht — sonst
+  // bleibt das jeweilige Feld leer, statt einen unpassenden Freitext
+  // hineinzuschreiben.
   const IMPORT_FIELD_OPTIONS = [
     { key: '', label: '— ignorieren —' },
     { key: 'firstName', label: 'Vorname' },
     { key: 'lastName', label: 'Nachname' },
     { key: 'nickname', label: 'Spitzname' },
     { key: 'position', label: 'Position 1' },
+    { key: 'position2', label: 'Position 2' },
     { key: 'birthdate', label: 'Geburtsdatum' },
     { key: 'number', label: 'Trikotnummer' },
     { key: 'initials', label: 'Kürzel' },
@@ -4101,7 +4104,8 @@
       if (/kürzel|kuerzel|initial/.test(t)) return 'initials';
       if (/geburt|birth/.test(t)) return 'birthdate';
       if (/trikot|rückennummer|ruecken|nummer|number|^#$|^nr\.?$/.test(t)) return 'number';
-      if (/pos(ition)?/.test(t)) return 'position';
+      if (/pos(ition)?\s*2/.test(t)) return 'position2';
+      if (/pos(ition)?(\s*1)?/.test(t)) return 'position';
       return '';
     });
   }
@@ -4157,13 +4161,16 @@
         const numberRaw = rec.number ? parseInt(String(rec.number).replace(/[^0-9-]/g, ''), 10) : NaN;
         const number = Number.isFinite(numberRaw) ? clamp(numberRaw, 0, 99) : null;
         const initials = (rec.initials || '').toUpperCase().slice(0, 4) || defaultInitials(firstName, lastName);
-        // Nur ein exaktes Kürzel-Match wird als Position 1 übernommen (z. B.
-        // "TW" oder "tw") — ein längerer Freitext wie "Torwart" würde sonst
-        // fälschlich als gültig erscheinen; er bleibt dann einfach leer und
-        // ist im Kader danach manuell über das Dropdown ergänzbar.
+        // Nur ein exaktes Kürzel-Match wird als Position 1/2 übernommen
+        // (z. B. "TW" oder "tw") — ein längerer Freitext wie "Torwart" würde
+        // sonst fälschlich als gültig erscheinen; er bleibt dann einfach leer
+        // und ist im Kader danach manuell über das Dropdown ergänzbar.
         const posRaw = (rec.position || '').trim();
         const posCode = posRaw.toUpperCase();
         const position1 = POSITION_CODES.includes(posCode) ? posCode : '';
+        const pos2Raw = (rec.position2 || '').trim();
+        const pos2Code = pos2Raw.toUpperCase();
+        const position2 = POSITION_CODES.includes(pos2Code) ? pos2Code : '';
         // Ein Freitext, der zu keinem der 8 Kürzel passt (z. B. "Mittelfeld"),
         // geht nicht verloren: er landet unangetastet in `position` (genau wie
         // beim Bestandsschutz für vor Position-1/2 angelegte Kadereinträge) und
@@ -4171,7 +4178,7 @@
         // Position 1/2 übertragen wird.
         entries.push({
           id: genRosterId(), firstName, lastName, nickname: rec.nickname || '',
-          position1, position2: '', position: position1 ? '' : posRaw, birthdate, number, initials,
+          position1, position2, position: position1 ? '' : posRaw, birthdate, number, initials,
           starting: false, injured: false, hidden: false,
         });
       });

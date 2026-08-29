@@ -1,5 +1,3 @@
-import { logout } from "../login/actions";
-
 // Bettet den bisherigen (jetzt server-persistenten) Taktiktafel-Editor per
 // iframe ein. Das isoliert dessen eigenes CSS/JS vollstaendig vom Rest der
 // Next.js-App (u. a. von Tailwinds globalem Preflight-Reset in
@@ -11,44 +9,18 @@ import { logout } from "../login/actions";
 // im Editor deckt denselben Datensatz (Tabelle "players") vollstaendig
 // ab und zusaetzlich CSV/Excel-Import sowie Drag&Drop aufs Spielfeld --
 // die einfache Liste war damit eine reine Teilmenge ohne eigenen Nutzen.
+//
+// Der Abmelden-Button lebt im Editor-Header selbst (oben rechts neben
+// "Neue Taktik", siehe editor.source.html) statt in einer eigenen Leiste
+// hier aussen -- ein <form action> per Next.js-Server-Action ist aus dem
+// isolierten iframe-Dokument heraus nicht aufrufbar, daher POSTet der
+// Button dort stattdessen mit target="_top" auf /api/logout.
 export default function TaktikPage() {
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 16px",
-          background: "#0f172a",
-          color: "#f8fafc",
-          fontFamily: "system-ui, sans-serif",
-          fontSize: 14,
-        }}
-      >
-        <strong>SVKT Taktikboard</strong>
-        <form action={logout}>
-          <button
-            type="submit"
-            style={{
-              color: "#f8fafc",
-              background: "transparent",
-              border: "1px solid #334155",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            Abmelden
-          </button>
-        </form>
-      </div>
-      <iframe
-        src="/taktik-app"
-        title="Taktiktafel-Editor"
-        style={{ flex: 1, border: "none", width: "100%" }}
-      />
-    </div>
+    <iframe
+      src="/taktik-app"
+      title="Taktiktafel-Editor"
+      style={{ height: "100vh", width: "100%", border: "none", display: "block" }}
+    />
   );
 }
