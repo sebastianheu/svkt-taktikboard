@@ -312,6 +312,8 @@
     margin-bottom: 12px;
   }
 
+  .fussballde-import-block { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+
   .team-colors {
     display: flex;
     gap: 14px;
@@ -1238,6 +1240,15 @@
     <aside class="rail rail-left">
       <section class="panel">
         <h2 class="panel-title">Elemente hinzufügen</h2>
+        <div class="fussballde-import-block">
+          <div class="hint">Fußball.de-Link einer Partie einfügen, um Namen &amp; Farben für Team A/B automatisch aus den Vereinslogos zu übernehmen.</div>
+          <div class="roster-import-row" style="margin-top:8px;">
+            <input type="text" id="fussballdeMyClubInput" class="team-name-input" style="width:84px;" maxlength="30" spellcheck="false" value="SVKT" title="Erkennungs-Stichwort für „mein Team“ (Groß-/Kleinschreibung egal) — muss im Mannschaftsnamen vorkommen." aria-label="Mein Team enthält">
+            <input type="url" id="fussballdeUrlInput" class="team-name-input" style="flex:1; min-width:200px; width:auto;" placeholder="https://www.fussball.de/spiel/…" spellcheck="false" autocomplete="off" aria-label="Fußball.de-Link zur Partie">
+            <button type="button" class="btn btn-ghost btn-sm" id="fussballdeImportBtn">Übernehmen</button>
+          </div>
+          <div id="fussballdeImportStatus" class="hint hidden" style="margin-top:8px;"></div>
+        </div>
         <div class="team-colors">
           <div class="team-color-field">
             <input type="text" id="teamANameInput" class="team-name-input" value="Team A" maxlength="24" spellcheck="false" aria-label="Name für Team A">
@@ -2103,6 +2114,11 @@
     const g = parseInt(h.substring(2, 4), 16) || 0;
     const b = parseInt(h.substring(4, 6), 16) || 0;
     return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function rgbToHex(r, g, b) {
+    const c = (n) => clamp(Math.round(n), 0, 255).toString(16).padStart(2, '0');
+    return `#${c(r)}${c(g)}${c(b)}`.toUpperCase();
   }
 
   // Keeps a range input's custom --fill CSS variable (see the
@@ -3146,6 +3162,10 @@
   const gkColorPopover = document.getElementById('gkColorPopover');
   const swatchA = document.getElementById('swatchA');
   const swatchB = document.getElementById('swatchB');
+  const fussballdeMyClubInput = document.getElementById('fussballdeMyClubInput');
+  const fussballdeUrlInput = document.getElementById('fussballdeUrlInput');
+  const fussballdeImportBtn = document.getElementById('fussballdeImportBtn');
+  const fussballdeImportStatus = document.getElementById('fussballdeImportStatus');
   const libraryStatus = document.getElementById('libraryStatus');
   const libraryList = document.getElementById('libraryList');
   const folderMenu = document.getElementById('folderMenu');
@@ -3460,6 +3480,139 @@
   teamBNameInput.addEventListener('input', () => setTeamName('b', teamBNameInput.value));
   teamANameInput.addEventListener('blur', () => { if (!teamANameInput.value.trim()) { teamANameInput.value = 'Team A'; setTeamName('a', 'Team A'); } });
   teamBNameInput.addEventListener('blur', () => { if (!teamBNameInput.value.trim()) { teamBNameInput.value = 'Team B'; setTeamName('b', 'Team B'); } });
+
+  /* ============================================================
+     Fußball.de-Import: aus einem Partie-Link automatisch Team-A/B-Namen
+     und -Farben ableiten. Team A ist immer "unser" Team (erkannt per
+     Stichwort-Suche im Mannschaftsnamen, siehe fussballdeMyClubInput,
+     Standard "SVKT"), Team B immer der Gegner — unabhängig davon, wer
+     laut fussball.de Heim- oder Gastmannschaft ist. Die eigentliche
+     Seite wird server-seitig via /api/fussballde-import geladen (CORS
+     + Anti-Scraping-Header lassen sich aus dem iframe heraus nicht
+     umgehen); die Logos kommen von dort bereits als data:-URLs zurück,
+     damit sie hier per <canvas> pixelgenau ausgelesen werden können
+     (ein direkt von fussball.de geladenes <img> würde die Canvas wegen
+     fehlender CORS-Header "verunreinigen" und jeden getImageData-Zugriff
+     mit einem SecurityError blockieren).
+     ============================================================ */
+
+  const FUSSBALLDE_MY_CLUB_KEY = 'spielzugregie.fussballdemyclub.v1';
+  try {
+    const savedClub = localStorage.getItem(FUSSBALLDE_MY_CLUB_KEY);
+    if (savedClub) fussballdeMyClubInput.value = savedClub;
+  } catch (e) { /* ignore */ }
+  fussballdeMyClubInput.addEventListener('change', () => {
+    try { localStorage.setItem(FUSSBALLDE_MY_CLUB_KEY, fussballdeMyClubInput.value.trim()); } catch (e) { /* ignore */ }
+  });
+
+  function showFussballdeStatus(message, tone) {
+    fussballdeImportStatus.textContent = message;
+    fussballdeImportStatus.style.color = tone === 'error' ? 'var(--danger)' : 'var(--text-dim)';
+    fussballdeImportStatus.classList.toggle('hidden', !message);
+  }
+
+  // Liest die dominante, nicht-weiße/nicht-transparente Farbe aus einem
+  // Logo (als data:-URL) via Offscreen-Canvas — Pixel werden auf ein
+  // grobes Raster gerundet (Anti-Aliasing-Rauschen) und dann die
+  // häufigste Farbgruppe als Ergebnis genommen. Kein Anspruch auf die
+  // "offizielle" Vereinsfarbe, nur eine brauchbare automatische Schätzung.
+  function extractDominantColorFromDataUrl(dataUrl) {
+    return new Promise((resolve) => {
+      if (!dataUrl) { resolve(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        if (!w || !h) { resolve(null); return; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        let data;
+        try {
+          data = ctx.getImageData(0, 0, w, h).data;
+        } catch (e) { resolve(null); return; }
+        const buckets = new Map();
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+          if (a < 128) continue; // transparent
+          if (r > 235 && g > 235 && b > 235) continue; // (fast) weißer Hintergrund
+          const qr = Math.round(r / 16) * 16, qg = Math.round(g / 16) * 16, qb = Math.round(b / 16) * 16;
+          const key = qr + ',' + qg + ',' + qb;
+          const entry = buckets.get(key);
+          if (entry) { entry.count++; entry.r += r; entry.g += g; entry.b += b; }
+          else buckets.set(key, { count: 1, r, g, b });
+        }
+        if (buckets.size === 0) { resolve(null); return; }
+        let best = null;
+        buckets.forEach((v) => { if (!best || v.count > best.count) best = v; });
+        resolve(rgbToHex(best.r / best.count, best.g / best.count, best.b / best.count));
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  fussballdeImportBtn.addEventListener('click', async () => {
+    const url = fussballdeUrlInput.value.trim();
+    if (!url) { showFussballdeStatus('Bitte zuerst einen Fußball.de-Link einfügen.', 'error'); return; }
+    const clubKeyword = (fussballdeMyClubInput.value || '').trim().toLowerCase();
+    if (!clubKeyword) { showFussballdeStatus('Bitte das Erkennungs-Stichwort für „mein Team“ ausfüllen.', 'error'); return; }
+
+    fussballdeImportBtn.disabled = true;
+    showFussballdeStatus('Partie wird geladen …', 'info');
+    try {
+      const res = await fetch('/api/fussballde-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        showFussballdeStatus((json && json.error) || 'Die Partie konnte nicht geladen werden.', 'error');
+        return;
+      }
+
+      const homeMatches = json.home.name.toLowerCase().includes(clubKeyword);
+      const awayMatches = json.away.name.toLowerCase().includes(clubKeyword);
+      let mine, opponent;
+      if (homeMatches && !awayMatches) { mine = json.home; opponent = json.away; }
+      else if (awayMatches && !homeMatches) { mine = json.away; opponent = json.home; }
+      else if (homeMatches && awayMatches) { mine = json.home; opponent = json.away; }
+      else {
+        showFussballdeStatus(
+          `Konnte anhand von „${fussballdeMyClubInput.value.trim()}“ nicht erkennen, welches Team eures ist (gefunden: „${json.home.name}“ vs. „${json.away.name}“). Stichwort oben anpassen und erneut versuchen.`,
+          'error'
+        );
+        return;
+      }
+
+      // Auf die maxlength der Namensfelder (24) trimmen, damit ein langer
+      // Fußball.de-Mannschaftsname (der per JS ohne maxlength-Limit
+      // gesetzt würde) nicht unbemerkt länger als sonst möglich wird.
+      const myNameTrimmed = mine.name.slice(0, 24);
+      const opponentNameTrimmed = opponent.name.slice(0, 24);
+      teamANameInput.value = myNameTrimmed;
+      setTeamName('a', myNameTrimmed);
+      teamBNameInput.value = opponentNameTrimmed;
+      setTeamName('b', opponentNameTrimmed);
+
+      const [colorA, colorB] = await Promise.all([
+        extractDominantColorFromDataUrl(mine.logoDataUrl),
+        extractDominantColorFromDataUrl(opponent.logoDataUrl),
+      ]);
+      if (colorA) setTeamColor('a', colorA);
+      if (colorB) setTeamColor('b', colorB);
+
+      const colorNote = (!colorA || !colorB) ? ' (Farbe aus mind. einem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
+      showFussballdeStatus(`Übernommen: Team A = „${mine.name}“, Team B = „${opponent.name}“.${colorNote}`, colorNote ? 'error' : 'info');
+    } catch (e) {
+      showFussballdeStatus('Die Partie konnte nicht geladen werden (Netzwerkfehler).', 'error');
+    } finally {
+      fussballdeImportBtn.disabled = false;
+    }
+  });
 
   /* ============================================================
      Team-Reiter: Kaderverwaltung (Vorname, Nachname, Position, Alter,
