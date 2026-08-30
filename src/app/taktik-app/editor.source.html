@@ -184,6 +184,14 @@
     justify-self: end;
   }
 
+  /* Ohne diese Regel bekommt das <form> als Flex-Item eine eigene Box,
+     die den Abmelden-Button minimal höher schieben kann als die
+     übrigen Icon-Buttons in .topbar-controls (z. B. Rückgängig/
+     Wiederholen) — display:contents nimmt das <form> aus dem Layout
+     heraus, sein Button-Kind wird direktes, gleich ausgerichtetes
+     Flex-Item. Das Formularverhalten (Submit) bleibt unberührt. */
+  .topbar-logout-form { display: contents; }
+
   .history-controls {
     display: flex;
     align-items: center;
@@ -1111,27 +1119,32 @@
      (siehe roster-table-wrap: overflow-x:auto sorgt bei zu wenig Platz
      für horizontales Scrollen statt eines Zeilenumbruchs). */
   .roster-flags-cell { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; }
+  /* Gleiche Groesse wie .icon-btn (Bearbeiten/Loeschen), damit alle fünf
+     Buttons einer Zeile einheitlich wirken. */
   .roster-flag-btn {
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    border-radius: 6px;
+    border-radius: 7px;
     border: 1px solid var(--border-strong);
     background: transparent;
     color: var(--text-faint);
     font-family: 'Oswald', sans-serif;
     font-weight: 700;
-    font-size: 10.5px;
+    font-size: 12px;
     line-height: 1;
   }
   .roster-flag-btn:hover { background: var(--surface-3); color: var(--text); }
   .roster-flag-btn.is-active-start { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .roster-flag-btn.is-active-injured { background: rgba(229,72,77,0.16); border-color: rgba(229,72,77,0.5); color: var(--danger); }
   .roster-flag-btn.is-active-hidden { background: rgba(159,176,204,0.18); border-color: var(--border-strong); color: var(--text); }
+  /* Feine Trennlinie zwischen den Status-Togglern (Startelf/Verletzt/
+     Ausblenden) und den Zeilen-Aktionen (Bearbeiten/Löschen). */
+  .roster-btn-divider { width: 1px; height: 20px; flex-shrink: 0; background: var(--border-strong); margin: 0 2px; }
 
   .roster-chip-list {
     display: flex;
@@ -1215,7 +1228,7 @@
         <button id="redoBtn" type="button" class="icon-btn" title="Wiederholen (Strg+Umschalt+Z)" aria-label="Wiederholen" disabled></button>
       </div>
       <button id="clearBtn" class="btn btn-accent btn-hero" title="Alles zurücksetzen und mit einer leeren Situation neu beginnen">Neue Taktik</button>
-      <form action="/api/logout" method="post" target="_top">
+      <form action="/api/logout" method="post" target="_top" class="topbar-logout-form">
         <button id="logoutBtn" type="submit" class="icon-btn" title="Abmelden" aria-label="Abmelden"></button>
       </form>
     </div>
@@ -1757,6 +1770,10 @@
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px;">
           <h2 class="panel-title" style="margin-bottom:0;">Kaderliste (<span id="rosterCount">0</span>)</h2>
           <button id="rosterDeleteAllBtn" type="button" class="btn btn-ghost btn-sm" title="Alle Spieler:innen aus der Kaderliste entfernen">Alle löschen</button>
+        </div>
+        <div id="rosterLoadError" class="hint hidden" style="color:var(--danger); margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span>Kaderliste konnte nicht vom Server geladen werden. Damit dabei nichts überschrieben wird, sind Änderungen an der Kaderliste vorübergehend gesperrt.</span>
+          <button type="button" id="rosterLoadRetryBtn" class="btn btn-ghost btn-sm">Erneut versuchen</button>
         </div>
         <div id="rosterEmpty" class="hint">Noch keine Spieler:innen angelegt.</div>
         <div id="rosterTableWrap" class="roster-table-wrap hidden">
@@ -3159,6 +3176,8 @@
   const rosterCancelEditBtn = document.getElementById('rosterCancelEditBtn');
   const rosterCount = document.getElementById('rosterCount');
   const rosterDeleteAllBtn = document.getElementById('rosterDeleteAllBtn');
+  const rosterLoadError = document.getElementById('rosterLoadError');
+  const rosterLoadRetryBtn = document.getElementById('rosterLoadRetryBtn');
   const rosterEmpty = document.getElementById('rosterEmpty');
   const rosterTableWrap = document.getElementById('rosterTableWrap');
   const rosterTableBody = document.getElementById('rosterTableBody');
@@ -3482,7 +3501,20 @@
       return Array.isArray(players) ? players.map(dbPlayerToRosterPlayer) : null;
     } catch (e) { return null; }
   }
+  // Verhindert, dass ein fehlgeschlagenes initiales Laden (z. B. kurzer
+  // Netzwerk-/Server-Hänger) den auf dem Server gespeicherten Kader
+  // überschreibt: persistRoster() sendet das komplette `roster`-Array als
+  // Ersatz (siehe /api/players/bulk) — würde also bei einem noch leeren,
+  // lokal nicht befüllten `roster` faelschlich den kompletten
+  // Bestandskader loeschen. Solange rosterLoadFailed gesetzt ist, wird
+  // deshalb gar nicht erst gespeichert (siehe rosterLoadError-Banner samt
+  // "Erneut versuchen"-Button im Kaderliste-Panel).
+  let rosterLoadFailed = false;
   function persistRoster() {
+    if (rosterLoadFailed) {
+      console.error('Kader wurde NICHT gespeichert: initiales Laden war fehlgeschlagen, siehe rosterLoadError-Banner.');
+      return false;
+    }
     fetch('/api/players/bulk', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -3683,7 +3715,13 @@
 
   function renderRosterList() {
     rosterCount.textContent = String(roster.length);
-    rosterDeleteAllBtn.disabled = roster.length === 0;
+    rosterDeleteAllBtn.disabled = roster.length === 0 || rosterLoadFailed;
+    // Solange das initiale Laden fehlgeschlagen ist, bleiben Hinzufügen/
+    // Import gesperrt — sonst würde ein Speichern (persistRoster) auf dem
+    // dann noch leeren `roster` faelschlich den Bestandskader loeschen
+    // (siehe Kommentar bei persistRoster).
+    rosterSaveBtn.disabled = rosterLoadFailed;
+    rosterImportBtn.disabled = rosterLoadFailed;
     if (roster.length === 0) {
       rosterEmpty.classList.remove('hidden');
       rosterTableWrap.classList.add('hidden');
@@ -3772,7 +3810,10 @@
         if (!confirmed) return;
         deleteRosterEntry(p.id);
       });
-      tdFlags.append(startBtn, injuredBtn, hiddenBtn, editBtn, delBtn);
+      const btnDivider = document.createElement('span');
+      btnDivider.className = 'roster-btn-divider';
+      btnDivider.setAttribute('aria-hidden', 'true');
+      tdFlags.append(startBtn, injuredBtn, hiddenBtn, btnDivider, editBtn, delBtn);
 
       tr.append(tdNum, tdFirst, tdLast, tdNick, tdInitials, tdPos, tdBirth, tdFlags);
       rosterTableBody.appendChild(tr);
@@ -7390,13 +7431,33 @@
   // fertig ist, zeigen Kader/Bibliothek kurz ihren (leeren) Anfangszustand
   // -- unkritisch, da alle Render-Funktionen bei jeder Aenderung ohnehin
   // erneut aufgerufen werden.
+  // Eigene Funktion (statt inline in bootstrapPersistedData), damit der
+  // "Erneut versuchen"-Button im rosterLoadError-Banner denselben Ladepfad
+  // erneut anstossen kann, ohne Bibliothek/Ordner nochmal mitzuladen.
+  async function loadAndRenderRoster() {
+    const serverRoster = await loadRosterFromServer();
+    if (serverRoster === null) {
+      rosterLoadFailed = true;
+      rosterLoadError.classList.remove('hidden');
+    } else {
+      rosterLoadFailed = false;
+      rosterLoadError.classList.add('hidden');
+      roster = serverRoster;
+    }
+    renderRosterList();
+    renderRosterQuickList();
+  }
+  rosterLoadRetryBtn.addEventListener('click', () => {
+    rosterLoadRetryBtn.disabled = true;
+    loadAndRenderRoster().finally(() => { rosterLoadRetryBtn.disabled = false; });
+  });
+
   (async function bootstrapPersistedData() {
-    const [serverRoster, serverLibrary, serverFolders] = await Promise.all([
-      loadRosterFromServer(),
+    const [, serverLibrary, serverFolders] = await Promise.all([
+      loadAndRenderRoster(),
       loadLibraryFromServer(),
       loadFoldersFromServer(),
     ]);
-    roster = serverRoster || [];
     folders = serverFolders || [];
     if (serverLibrary && serverLibrary.length) {
       library = serverLibrary;
@@ -7408,8 +7469,6 @@
     }
     renderFolderMenu();
     renderLibraryList();
-    renderRosterList();
-    renderRosterQuickList();
   })();
 })();
 </script>
