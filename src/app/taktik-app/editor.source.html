@@ -3638,7 +3638,7 @@
       nickname: row.nickname || '',
       position1: row.position1 || '',
       position2: row.position2 || '',
-      birthdate: row.birthdate || '',
+      birthdate: toDateOnlyString(row.birthdate),
       number: row.number,
       initials: row.initials || '',
       starting: !!row.starting,
@@ -3767,9 +3767,20 @@
   // Ältere, schon vor diesem Update angelegte Kadereinträge haben ggf.
   // noch ein gespeichertes `age` ohne `birthdate` — das wird unten als
   // Altbestand weiter angezeigt, aber nicht mehr neu vergeben.
+  // Erwartet reines 'YYYY-MM-DD', ist aber defensiv gegen einen vollen
+  // Zeitstempel (z. B. 'YYYY-MM-DDT00:00:00.000Z') -- so ein Wert wurde
+  // durch einen frueheren Server-Bug schon mal zurueckgegeben (Date-Objekt
+  // statt reinem Datumsstring, siehe /api/players GET) und fuehrte zu
+  // kaputt angezeigten Geburtsdaten. slice(0, 10) schneidet einen
+  // eventuellen Zeitanteil einfach ab, statt ihn versehentlich mit
+  // einzubauen.
+  function toDateOnlyString(v) {
+    return (v || '').slice(0, 10);
+  }
   function computeAgeFromBirthdate(birthdateIso) {
-    if (!birthdateIso) return null;
-    const bd = new Date(birthdateIso + 'T00:00:00');
+    const dateOnly = toDateOnlyString(birthdateIso);
+    if (!dateOnly) return null;
+    const bd = new Date(dateOnly + 'T00:00:00');
     if (isNaN(bd.getTime())) return null;
     const now = new Date();
     let age = now.getFullYear() - bd.getFullYear();
@@ -3778,9 +3789,10 @@
     return age >= 0 && age < 130 ? age : null;
   }
   function formatDateDMY(iso) {
-    if (!iso) return '';
-    const parts = iso.split('-');
-    if (parts.length !== 3) return iso;
+    const dateOnly = toDateOnlyString(iso);
+    if (!dateOnly) return '';
+    const parts = dateOnly.split('-');
+    if (parts.length !== 3) return dateOnly;
     const [y, m, d] = parts;
     return `${d}.${m}.${y}`;
   }
@@ -3827,7 +3839,7 @@
     rosterNicknameInput.value = p.nickname || '';
     rosterPosition1Select.value = p.position1 || '';
     rosterPosition2Select.value = p.position2 || '';
-    rosterBirthdateInput.value = p.birthdate || '';
+    rosterBirthdateInput.value = toDateOnlyString(p.birthdate);
     rosterNumberInput.value = p.number == null ? '' : p.number;
     rosterInitialsInput.value = p.initials || defaultInitials(p.firstName, p.lastName);
     initialsManuallyEdited = true; // beim Bearbeiten nie automatisch überschreiben

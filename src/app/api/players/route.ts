@@ -6,6 +6,20 @@ import { getDb } from "@/lib/db";
 // (Taktik-Editor, Import) dieselbe Vokabel gilt.
 const POSITION_CODES = ["", "TW", "AV", "IV", "DM", "ZM", "OM", "FL", "ST"];
 
+// Der Neon-HTTP-Treiber liefert die DATE-Spalte "birthdate" als
+// JS-Date-Objekt zurueck (Mitternacht UTC) statt als reinen 'YYYY-MM-DD'
+// String -- NextResponse.json() serialisiert ein Date ueber
+// toISOString() und haengt dabei "T00:00:00.000Z" an. Der Editor
+// (formatDateDMY, computeAgeFromBirthdate, das native <input
+// type="date">) erwartet aber ausschliesslich 'YYYY-MM-DD' und zeigt bei
+// einem vollen Zeitstempel kaputte Werte an (z. B. "18T00:00:00.000Z.09.2004").
+// Daher hier einmalig auf den reinen Datumsanteil normalisieren.
+function toDateOnlyString(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
 export async function GET() {
   const sql = await getDb();
   const rows = await sql`
@@ -14,7 +28,11 @@ export async function GET() {
     FROM players
     ORDER BY number NULLS LAST, last_name ASC
   `;
-  return NextResponse.json({ players: rows });
+  const players = (rows as Record<string, unknown>[]).map((row) => ({
+    ...row,
+    birthdate: toDateOnlyString(row.birthdate),
+  }));
+  return NextResponse.json({ players });
 }
 
 export async function POST(request: NextRequest) {
