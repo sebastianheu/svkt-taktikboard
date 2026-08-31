@@ -329,9 +329,15 @@
     font-weight: 600;
     color: var(--text-dim);
   }
-  .gk-color-label {
+  .team-color-field-label {
     white-space: nowrap;
   }
+  /* Team A / Team B je ein Block (Name, Feldspieler-/Torwart-Farbe
+     nebeneinander, dann die beiden Hinzufügen-Buttons) -- untereinander
+     statt nebeneinander, siehe "Elemente hinzufügen"-Panel. */
+  .team-block { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  #teamBBlock { margin-bottom: 12px; padding-bottom: 0; border-bottom: none; }
+  .team-block .team-name-input { width: 100%; margin-bottom: 10px; }
 
   /* ---------- "ausblenden"-Checkboxen (Füllung/Rand/Linie) ---------- */
   .hide-toggles {
@@ -405,13 +411,27 @@
     z-index: 60;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 7px;
     background: var(--surface-3);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     padding: 8px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+    max-width: 168px;
   }
+  /* Zuletzt verwendete Farben (app-weit, siehe pushColorHistory) -- in
+     jedem Farb-Popover als eigene, umbrechende Zeile unter Picker+Hex. */
+  .color-history-row { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; }
+  .color-history-row.hidden { display: none; }
+  .color-history-swatch {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.35);
+    padding: 0;
+    cursor: pointer;
+  }
+  .color-history-swatch:hover { border-color: #fff; transform: scale(1.15); }
 
   /* "Elemente" add-menu popover (Ball + shapes) and per-entry menu
      popovers (e.g. folder assignment) share this look. */
@@ -1136,6 +1156,21 @@
   .roster-table tbody tr.roster-row-injured:hover { background: rgba(229,72,77,0.16); }
   /* Zeile, deren Daten gerade oben im Formular zum Bearbeiten geladen sind. */
   .roster-table tbody tr.roster-row-editing { outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* Rückennummer als farbiger Kreis-Chip, wie die Team-/Torwart-
+     Farbfelder im Taktik-Reiter. */
+  .roster-number-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: #fff;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1.5px solid rgba(255,255,255,0.35);
+  }
 
   /* Startelf(11)/Auswechselspieler:in/Ausgeblendet/Verletzt — vier
      Status-Buttons einer Zeile in einer einzigen, nicht umbrechenden
@@ -1259,52 +1294,74 @@
 
   <div class="workspace" id="taktikView">
     <aside class="rail rail-left">
+      <section class="panel" id="nextMatchPanel">
+        <h2 class="panel-title">Nächste Spielpaarung</h2>
+        <div class="hint">Fußball.de-Link der nächsten Partie einfügen, um Name &amp; Farben des Gegners (Team B) automatisch aus dem Vereinslogo zu übernehmen. Team A (eigenes Team) kommt aus dem Team-Reiter.</div>
+        <div class="roster-import-row" style="margin-top:8px;">
+          <input type="url" id="nextMatchUrlInput" class="team-name-input" style="flex:1; min-width:200px; width:auto;" placeholder="https://www.fussball.de/spiel/…" spellcheck="false" autocomplete="off" aria-label="Fußball.de-Link zur nächsten Partie">
+          <button type="button" class="btn btn-ghost btn-sm" id="nextMatchImportBtn">Übernehmen</button>
+        </div>
+        <div id="nextMatchImportStatus" class="hint hidden" style="margin-top:8px;"></div>
+      </section>
       <section class="panel">
         <h2 class="panel-title">Elemente hinzufügen</h2>
-        <div class="fussballde-import-block">
-          <div class="hint">Fußball.de-Link einer Partie einfügen, um Namen &amp; Farben für Team A/B automatisch aus den Vereinslogos zu übernehmen.</div>
-          <div class="roster-import-row" style="margin-top:8px;">
-            <input type="text" id="fussballdeMyClubInput" class="team-name-input" style="width:84px;" maxlength="30" spellcheck="false" value="SVKT" title="Erkennungs-Stichwort für „mein Team“ (Groß-/Kleinschreibung egal) — muss im Mannschaftsnamen vorkommen." aria-label="Mein Team enthält">
-            <input type="url" id="fussballdeUrlInput" class="team-name-input" style="flex:1; min-width:200px; width:auto;" placeholder="https://www.fussball.de/spiel/…" spellcheck="false" autocomplete="off" aria-label="Fußball.de-Link zur Partie">
-            <button type="button" class="btn btn-ghost btn-sm" id="fussballdeImportBtn">Übernehmen</button>
-          </div>
-          <div id="fussballdeImportStatus" class="hint hidden" style="margin-top:8px;"></div>
-        </div>
-        <div class="team-colors">
-          <div class="team-color-field">
-            <input type="text" id="teamANameInput" class="team-name-input" value="Team A" maxlength="24" spellcheck="false" aria-label="Name für Team A">
-            <div class="color-field-wrap" id="teamAColorWrap">
-              <button type="button" class="color-swatch-btn" id="teamASwatchBtn" style="background:#DB0000" aria-label="Team-A-Farbe wählen"></button>
-              <div class="color-popover hidden" id="teamAColorPopover">
-                <input type="color" id="teamAColorInput" value="#DB0000">
-                <input type="text" id="teamAHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
+        <div class="team-block" id="teamABlock">
+          <input type="text" id="teamANameInput" class="team-name-input" value="Team A" maxlength="24" spellcheck="false" aria-label="Name für Team A">
+          <div class="team-colors">
+            <div class="team-color-field">
+              <span class="team-color-field-label">Feldspieler</span>
+              <div class="color-field-wrap" id="teamAColorWrap">
+                <button type="button" class="color-swatch-btn" id="teamASwatchBtn" style="background:#DB0000" aria-label="Team-A-Feldspielerfarbe wählen"></button>
+                <div class="color-popover hidden" id="teamAColorPopover">
+                  <input type="color" id="teamAColorInput" value="#DB0000">
+                  <input type="text" id="teamAHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+            </div>
+            <div class="team-color-field">
+              <span class="team-color-field-label" title="Farbe für Spielericons mit der Position Torwart (TW) in Team A">Torwart</span>
+              <div class="color-field-wrap" id="teamAGkColorWrap">
+                <button type="button" class="color-swatch-btn" id="teamAGkSwatchBtn" style="background:#FFD400" aria-label="Team-A-Torwartfarbe wählen"></button>
+                <div class="color-popover hidden" id="teamAGkColorPopover">
+                  <input type="color" id="teamAGkColorInput" value="#FFD400">
+                  <input type="text" id="teamAGkHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
+                </div>
               </div>
             </div>
           </div>
-          <div class="team-color-field">
-            <input type="text" id="teamBNameInput" class="team-name-input" value="Team B" maxlength="24" spellcheck="false" aria-label="Name für Team B">
-            <div class="color-field-wrap" id="teamBColorWrap">
-              <button type="button" class="color-swatch-btn" id="teamBSwatchBtn" style="background:#0049AA" aria-label="Team-B-Farbe wählen"></button>
-              <div class="color-popover hidden" id="teamBColorPopover">
-                <input type="color" id="teamBColorInput" value="#0049AA">
-                <input type="text" id="teamBHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
-              </div>
-            </div>
-          </div>
-          <div class="team-color-field">
-            <span class="gk-color-label" title="Farbe für Spielericons mit der Position Torwart (TW), unabhängig vom Team">Torwart</span>
-            <div class="color-field-wrap" id="gkColorWrap">
-              <button type="button" class="color-swatch-btn" id="gkSwatchBtn" style="background:#FFD400" aria-label="Torwart-Farbe wählen"></button>
-              <div class="color-popover hidden" id="gkColorPopover">
-                <input type="color" id="gkColorInput" value="#FFD400">
-                <input type="text" id="gkHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
-              </div>
-            </div>
+          <div class="element-buttons">
+            <button class="add-btn" id="addPlayerABtn" data-add="playerA"><span class="swatch" id="swatchA" style="background:#DB0000"></span> Spieler·in hinzufügen</button>
+            <button class="add-btn" id="addGoalkeeperABtn" data-add="goalkeeperA"><span class="swatch" id="swatchAGk" style="background:#FFD400"></span> Torwart hinzufügen</button>
           </div>
         </div>
-        <div class="element-buttons">
-          <button class="add-btn" data-add="playerA"><span class="swatch" id="swatchA" style="background:#DB0000"></span> Spieler·in — <span id="playerABtnName">Team A</span></button>
-          <button class="add-btn" data-add="playerB"><span class="swatch" id="swatchB" style="background:#0049AA"></span> Spieler·in — <span id="playerBBtnName">Team B</span></button>
+        <div class="team-block" id="teamBBlock">
+          <input type="text" id="teamBNameInput" class="team-name-input" value="Team B" maxlength="24" spellcheck="false" aria-label="Name für Team B">
+          <div class="team-colors">
+            <div class="team-color-field">
+              <span class="team-color-field-label">Feldspieler</span>
+              <div class="color-field-wrap" id="teamBColorWrap">
+                <button type="button" class="color-swatch-btn" id="teamBSwatchBtn" style="background:#0049AA" aria-label="Team-B-Feldspielerfarbe wählen"></button>
+                <div class="color-popover hidden" id="teamBColorPopover">
+                  <input type="color" id="teamBColorInput" value="#0049AA">
+                  <input type="text" id="teamBHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+            </div>
+            <div class="team-color-field">
+              <span class="team-color-field-label" title="Farbe für Spielericons mit der Position Torwart (TW) in Team B">Torwart</span>
+              <div class="color-field-wrap" id="teamBGkColorWrap">
+                <button type="button" class="color-swatch-btn" id="teamBGkSwatchBtn" style="background:#FFD400" aria-label="Team-B-Torwartfarbe wählen"></button>
+                <div class="color-popover hidden" id="teamBGkColorPopover">
+                  <input type="color" id="teamBGkColorInput" value="#FFD400">
+                  <input type="text" id="teamBGkHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="element-buttons">
+            <button class="add-btn" id="addPlayerBBtn" data-add="playerB"><span class="swatch" id="swatchB" style="background:#0049AA"></span> Spieler·in hinzufügen</button>
+            <button class="add-btn" id="addGoalkeeperBBtn" data-add="goalkeeperB"><span class="swatch" id="swatchBGk" style="background:#FFD400"></span> Torwart hinzufügen</button>
+          </div>
         </div>
         <div class="section-subtitle">Elemente</div>
         <div class="element-picker-wrap" id="elementPickerWrap">
@@ -1350,15 +1407,6 @@
       </section>
       <section class="panel" id="rosterQuickPanel">
         <h2 class="panel-title">Kader</h2>
-        <label class="field" id="subLabelModeField" style="margin-bottom:10px;">
-          <span>Name unter Spielericon</span>
-          <select id="subLabelModeSelect">
-            <option value="first">Vorname</option>
-            <option value="last" selected>Nachname</option>
-            <option value="both">Vor- &amp; Nachname</option>
-            <option value="nickname">Spitzname</option>
-          </select>
-        </label>
         <div id="rosterQuickEmpty" class="hint">Noch keine Spieler:innen im Team-Reiter angelegt.</div>
         <div id="rosterQuickList" class="roster-chip-list hidden"></div>
         <div class="hint" id="rosterQuickHint" style="margin-top:0;">Spielerin auf das Feld ziehen, um sie dort zu platzieren.</div>
@@ -1383,9 +1431,14 @@
               <option value="last">Nachname</option>
               <option value="both">Vor- &amp; Nachname</option>
               <option value="nickname">Spitzname</option>
+              <option value="initials">Kürzel</option>
             </select>
           </div>
           <div class="hidden" id="subLabelStyleControls">
+            <label class="field">
+              <span>Schriftgröße: <span id="subLabelFontSizeValue">12</span>px</span>
+              <input type="range" id="subLabelFontSizeInput" min="8" max="24" step="1">
+            </label>
             <div class="field">
               <span>Untertext-Farbe</span>
               <div class="color-field-wrap" id="subLabelColorWrap">
@@ -1484,7 +1537,6 @@
                   <input type="text" id="playerFillHexInput" class="hex-input mono" maxlength="7" spellcheck="false" autocomplete="off">
                 </div>
               </div>
-              <div class="hint" style="margin-top:6px;">Standardmäßig die Teamfarbe (bzw. die Torwart-Farbe bei Position TW) — hier für dieses Icon individuell überschreibbar.</div>
             </div>
             <div class="field">
               <span>Rahmenfarbe</span>
@@ -1704,19 +1756,14 @@
 
     <aside class="rail rail-right">
       <section class="panel" id="libraryPanel">
-        <h2 class="panel-title">Bibliothek</h2>
+        <h2 class="panel-title">Taktiken</h2>
         <div id="libraryStatus" class="hint" style="margin:0 0 8px;"></div>
         <div class="folder-menu" id="folderMenu"></div>
         <div id="libraryList" class="lib-list"></div>
-        <div class="hint" style="margin-bottom:10px;">Wird automatisch gespeichert und ist auf all deinen Geräten verfügbar. Exportieren/Importieren dient nur noch der Sicherung als Datei.</div>
-        <div class="btn-row">
-          <button id="exportLibraryBtn" class="btn btn-ghost btn-sm">Exportieren</button>
-          <button id="importLibraryBtn" class="btn btn-ghost btn-sm">Importieren</button>
-        </div>
-        <input type="file" id="importLibraryFile" accept="application/json,.json" class="hidden">
+        <div class="hint">Taktik und Frames werden automatisch gespeichert und sind auf all deinen Geräten verfügbar.</div>
       </section>
       <section class="panel frames-panel">
-        <h2 class="panel-title">Frames</h2>
+        <h2 class="panel-title">Taktik erstellen</h2>
         <div id="framesList" class="frames-list"></div>
         <div class="frame-actions-row">
           <button id="addFrameBtn" type="button" class="icon-btn" title="Neuer Frame (kopiert den aktuell ausgewählten Frame)" aria-label="Neuer Frame"></button>
@@ -1724,7 +1771,6 @@
           <button id="restartBtn" type="button" class="icon-btn" title="GIF von vorne abspielen" aria-label="Von vorne abspielen"></button>
           <label class="toggle" title="Nach dem letzten Frame automatisch wieder zum ersten Frame übergehen und die Animation endlos wiederholen."><input type="checkbox" id="loopToggle" checked> Wiederholen</label>
         </div>
-        <div class="hint autosave-hint">Änderungen werden automatisch gespeichert</div>
       </section>
       <section class="panel export-panel">
         <h2 class="panel-title">Download</h2>
@@ -1747,6 +1793,19 @@
 
   <div class="team-view hidden" id="teamView">
     <div class="team-view-inner">
+      <section class="panel" id="teamInfoPanel">
+        <h2 class="panel-title">Team</h2>
+        <label class="field">
+          <span>Team-Name</span>
+          <input type="text" id="teamsTabNameInput" maxlength="24" placeholder="z. B. SVKT 07 Minden">
+        </label>
+        <div class="hint" style="margin-top:8px;">Alternativ Link zur eigenen Mannschaft auf fussball.de einfügen, um den Namen automatisch zu übernehmen (wird später auch für die automatische Gegner-Erkennung beim Spiel-Import genutzt).</div>
+        <div class="roster-import-row" style="margin-top:8px;">
+          <input type="url" id="teamFussballdeUrlInput" style="flex:1; min-width:200px;" placeholder="https://www.fussball.de/mannschaft/…" spellcheck="false" autocomplete="off" aria-label="Fußball.de-Link zur eigenen Mannschaft">
+          <button type="button" class="btn btn-ghost btn-sm" id="teamFussballdeImportBtn">Übernehmen</button>
+        </div>
+        <div id="teamFussballdeImportStatus" class="hint hidden" style="margin-top:8px;"></div>
+      </section>
       <section class="panel" id="rosterFormPanel">
         <h2 class="panel-title" id="rosterFormTitle">Spieler:in hinzufügen</h2>
         <div class="roster-form-grid">
@@ -2173,6 +2232,75 @@
   function isValidHex(h) {
     return /^#[0-9a-fA-F]{6}$/.test(h || '');
   }
+
+  /* ============================================================
+     Globale Farbhistorie: die letzten 10 an irgendeiner Stelle der
+     Anwendung gewählten Farben, app-weit geteilt (nicht je Farbfeld) und
+     in jedem .color-popover als Klick-Verknüpfung angezeigt — statt bei
+     einer schon einmal genutzten Farbe erneut den Hex-/RGB-Code eintippen
+     zu müssen. Generisch für ALLE aktuellen und künftigen Farbfelder:
+     jedes .color-popover folgt demselben Aufbau (ein <input type="color">
+     + ein .hex-input direkt daneben), daher reicht ein einziges,
+     delegiertes 'change'-Listening auf beide statt Code je Farbfeld.
+     ============================================================ */
+  const COLOR_HISTORY_KEY = 'spielzugregie.colorhistory.v1';
+  function loadColorHistory() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(COLOR_HISTORY_KEY) || '[]');
+      return Array.isArray(raw) ? raw.filter((h) => isValidHex(h)).slice(0, 10) : [];
+    } catch (e) { return []; }
+  }
+  let colorHistory = loadColorHistory();
+  function renderColorHistoryRow(row) {
+    row.innerHTML = '';
+    if (!colorHistory.length) { row.classList.add('hidden'); return; }
+    row.classList.remove('hidden');
+    colorHistory.forEach((hex) => {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'color-history-swatch';
+      sw.style.background = hex;
+      sw.title = hex;
+      sw.setAttribute('aria-label', `Farbe ${hex} übernehmen`);
+      sw.addEventListener('click', () => {
+        const popover = row.closest('.color-popover');
+        const colorInput = popover && popover.querySelector('input[type="color"]');
+        const hexInput = popover && popover.querySelector('input.hex-input');
+        if (colorInput) { colorInput.value = hex; colorInput.dispatchEvent(new Event('input', { bubbles: true })); }
+        else if (hexInput) { hexInput.value = hex; hexInput.dispatchEvent(new Event('input', { bubbles: true })); }
+      });
+      row.appendChild(sw);
+    });
+  }
+  function renderAllColorHistories() {
+    document.querySelectorAll('.color-history-row').forEach(renderColorHistoryRow);
+  }
+  function pushColorHistory(hex) {
+    hex = normalizeHex(hex).toUpperCase();
+    if (!isValidHex(hex)) return;
+    colorHistory = [hex, ...colorHistory.filter((h) => h !== hex)].slice(0, 10);
+    try { localStorage.setItem(COLOR_HISTORY_KEY, JSON.stringify(colorHistory)); } catch (e) { /* ignore */ }
+    renderAllColorHistories();
+  }
+  // Jedem .color-popover eine eigene Historie-Zeile anhängen (einmalig,
+  // direkt hier, weil alle Popover schon als statisches HTML vorliegen).
+  document.querySelectorAll('.color-popover').forEach((popover) => {
+    const row = document.createElement('div');
+    row.className = 'color-history-row hidden';
+    popover.appendChild(row);
+  });
+  renderAllColorHistories();
+  // 'change' (nicht 'input') -- feuert einmalig beim Schließen des
+  // nativen Farbwählers bzw. beim Verlassen des Hex-Felds, statt bei
+  // jeder Zwischenfarbe während des Ziehens im Farbrad.
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('.color-popover input[type="color"]')) {
+      pushColorHistory(e.target.value);
+    } else if (e.target.matches('.color-popover input.hex-input')) {
+      const h = normalizeHex(e.target.value);
+      if (isValidHex(h)) pushColorHistory(h);
+    }
+  });
 
   /* ---- Curved running paths: quadratic-bezier interpolation in meter
      space. Every segment (one element, between two consecutive frames)
@@ -2720,6 +2848,19 @@
     if (isSelected) drawPolyVertexHandles(ctx, [p0, p1], scale);
   }
 
+  // Zentrale Farb-Auflösung für Spielericons: el.fillColor überschreibt
+  // alles individuell; sonst greift bei Torwarten (el.isGoalkeeper) die
+  // separate Torwart-Farbe des jeweiligen Teams, sonst die normale
+  // Feldspieler-Teamfarbe. Von drawElementShape, drawPaths und dem
+  // Inspector-Standardwert gemeinsam genutzt, damit alle drei Stellen
+  // exakt dieselbe Logik anwenden.
+  function resolvePlayerFillColor(el, teamColors) {
+    if (el.fillColor) return el.fillColor;
+    const isA = el.team === 'A';
+    if (el.isGoalkeeper) return isA ? teamColors.aGk : teamColors.bGk;
+    return isA ? teamColors.a : teamColors.b;
+  }
+
   function drawElementShape(ctx, el, pos, isSelected, scale, teamColors) {
     const mx = (pos.x / 100) * PITCH_LENGTH, my = (pos.y / 100) * PITCH_WIDTH;
 
@@ -2735,7 +2876,7 @@
     // automatische Torwart-Farbe, siehe addRosterPlayerToField, oder eine
     // manuelle Wahl im Inspector) — ohne Override bleibt es wie bisher die
     // Teamfarbe.
-    ctx.fillStyle = el.fillColor || (el.team === 'A' ? teamColors.a : teamColors.b);
+    ctx.fillStyle = resolvePlayerFillColor(el, teamColors);
     ctx.fill();
     ctx.lineWidth = Math.max(1.2 / scale, r * 0.14);
     ctx.strokeStyle = el.borderColor || COLORS.line;
@@ -2793,17 +2934,29 @@
     // abgerundeten Hintergrund-Pill in wählbarer Farbe (el.subLabelBg /
     // el.subLabelBgColor), an die tatsächliche Textbreite angepasst.
     if (el.type === 'player' && el.subLabel) {
-      const subFontPx = Math.max(9, PLAYER_R_M * 0.62 * view.scale);
+      // el.subLabelFontSize ist die vom Inspector wählbare Schriftgröße
+      // in "px" (Standard 12, siehe subLabelFontSizeInput) — als Faktor
+      // relativ zu diesem Standard auf die bisherige, mit view.scale
+      // mitskalierende Weltgrößen-Formel angewendet, damit sich an der
+      // bestehenden Zoom-/Export-Logik nichts ändert.
+      const fontSizeFactor = (el.subLabelFontSize != null ? el.subLabelFontSize : 12) / 12;
+      const subFontPx = Math.max(6, PLAYER_R_M * 0.62 * fontSizeFactor * view.scale);
       const subDy = PLAYER_R_M * 1.55 * view.scale;
       ctx.font = `600 ${subFontPx}px Manrope, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+      ctx.textBaseline = 'middle';
+      // Ein gemeinsamer Mittelpunkt (textCenterY) für Box UND Text, statt
+      // beide getrennt von oben aus zu positionieren -- so bleibt der Text
+      // bei jeder Schriftgröße exakt horizontal UND vertikal auf dem
+      // Hintergrund zentriert, ohne die beiden Werte manuell abgleichen zu
+      // müssen.
+      const textCenterY = sy + subDy + subFontPx * 0.6;
 
       if (el.subLabelBg) {
         const textW = ctx.measureText(el.subLabel).width;
         const padX = subFontPx * 0.55, padY = subFontPx * 0.32;
         const boxW = textW + padX * 2, boxH = subFontPx * 1.2 + padY * 2;
-        const boxX = sx - boxW / 2, boxY = sy + subDy - padY * 0.7;
+        const boxX = sx - boxW / 2, boxY = textCenterY - boxH / 2;
         const radius = Math.min(boxH / 2, subFontPx * 0.4);
         ctx.beginPath();
         ctx.moveTo(boxX + radius, boxY);
@@ -2820,9 +2973,9 @@
       ctx.miterLimit = 2;
       ctx.lineWidth = Math.max(2, subFontPx * 0.22);
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(el.subLabel, sx, sy + subDy);
+      ctx.strokeText(el.subLabel, sx, textCenterY);
       ctx.fillStyle = el.subLabelColor || '#fff';
-      ctx.fillText(el.subLabel, sx, sy + subDy);
+      ctx.fillText(el.subLabel, sx, textCenterY);
     }
   }
 
@@ -2844,7 +2997,7 @@
           ? hexToRgba(el.fillColor || COLORS.marker, 0.6)
           : el.type === 'line'
             ? hexToRgba(el.borderColor || COLORS.markerInk, 0.6)
-            : hexToRgba(el.fillColor || (el.team === 'A' ? teamColors.a : teamColors.b), 0.65);
+            : hexToRgba(resolvePlayerFillColor(el, teamColors), 0.65);
 
       ctx.beginPath();
       let lastC = null;
@@ -3018,7 +3171,7 @@
     elements: [],
     frames: [],
     pitchPreset: 'twoThirds',
-    teamColors: { a: '#DB0000', b: '#0049AA', gk: '#FFD400' },
+    teamColors: { a: '#DB0000', aGk: '#FFD400', b: '#0049AA', bGk: '#FFD400' },
     teamNames: { a: 'Team A', b: 'Team B' },
     activeLibraryId: null,
     activeFolderId: '__all__',
@@ -3188,22 +3341,24 @@
   const teamBHexInput = document.getElementById('teamBHexInput');
   const teamBSwatchBtn = document.getElementById('teamBSwatchBtn');
   const teamBColorPopover = document.getElementById('teamBColorPopover');
-  const gkColorInput = document.getElementById('gkColorInput');
-  const gkHexInput = document.getElementById('gkHexInput');
-  const gkSwatchBtn = document.getElementById('gkSwatchBtn');
-  const gkColorPopover = document.getElementById('gkColorPopover');
+  const teamAGkColorInput = document.getElementById('teamAGkColorInput');
+  const teamAGkHexInput = document.getElementById('teamAGkHexInput');
+  const teamAGkSwatchBtn = document.getElementById('teamAGkSwatchBtn');
+  const teamAGkColorPopover = document.getElementById('teamAGkColorPopover');
+  const teamBGkColorInput = document.getElementById('teamBGkColorInput');
+  const teamBGkHexInput = document.getElementById('teamBGkHexInput');
+  const teamBGkSwatchBtn = document.getElementById('teamBGkSwatchBtn');
+  const teamBGkColorPopover = document.getElementById('teamBGkColorPopover');
   const swatchA = document.getElementById('swatchA');
   const swatchB = document.getElementById('swatchB');
-  const fussballdeMyClubInput = document.getElementById('fussballdeMyClubInput');
-  const fussballdeUrlInput = document.getElementById('fussballdeUrlInput');
-  const fussballdeImportBtn = document.getElementById('fussballdeImportBtn');
-  const fussballdeImportStatus = document.getElementById('fussballdeImportStatus');
+  const swatchAGk = document.getElementById('swatchAGk');
+  const swatchBGk = document.getElementById('swatchBGk');
+  const nextMatchUrlInput = document.getElementById('nextMatchUrlInput');
+  const nextMatchImportBtn = document.getElementById('nextMatchImportBtn');
+  const nextMatchImportStatus = document.getElementById('nextMatchImportStatus');
   const libraryStatus = document.getElementById('libraryStatus');
   const libraryList = document.getElementById('libraryList');
   const folderMenu = document.getElementById('folderMenu');
-  const exportLibraryBtn = document.getElementById('exportLibraryBtn');
-  const importLibraryBtn = document.getElementById('importLibraryBtn');
-  const importLibraryFile = document.getElementById('importLibraryFile');
   const modalOverlay = document.getElementById('modalOverlay');
   const modalBox = document.getElementById('modalBox');
   const viewTabButtons = document.querySelectorAll('.view-tab');
@@ -3213,7 +3368,6 @@
   const rosterQuickEmpty = document.getElementById('rosterQuickEmpty');
   const rosterQuickList = document.getElementById('rosterQuickList');
   const rosterQuickHint = document.getElementById('rosterQuickHint');
-  const subLabelModeSelect = document.getElementById('subLabelModeSelect');
   const rosterFormTitle = document.getElementById('rosterFormTitle');
   const rosterFirstNameInput = document.getElementById('rosterFirstNameInput');
   const rosterLastNameInput = document.getElementById('rosterLastNameInput');
@@ -3241,13 +3395,21 @@
   const rosterImportStatus = document.getElementById('rosterImportStatus');
   const teamANameInput = document.getElementById('teamANameInput');
   const teamBNameInput = document.getElementById('teamBNameInput');
-  const playerABtnName = document.getElementById('playerABtnName');
-  const playerBBtnName = document.getElementById('playerBBtnName');
+  const teamsTabNameInput = document.getElementById('teamsTabNameInput');
+  const teamFussballdeUrlInput = document.getElementById('teamFussballdeUrlInput');
+  const teamFussballdeImportBtn = document.getElementById('teamFussballdeImportBtn');
+  const teamFussballdeImportStatus = document.getElementById('teamFussballdeImportStatus');
+  const addPlayerABtn = document.getElementById('addPlayerABtn');
+  const addGoalkeeperABtn = document.getElementById('addGoalkeeperABtn');
+  const addPlayerBBtn = document.getElementById('addPlayerBBtn');
+  const addGoalkeeperBBtn = document.getElementById('addGoalkeeperBBtn');
   const subLabelField = document.getElementById('subLabelField');
   const subLabelInput = document.getElementById('subLabelInput');
   const playerSubLabelModeField = document.getElementById('playerSubLabelModeField');
   const playerSubLabelModeSelect = document.getElementById('playerSubLabelModeSelect');
   const subLabelStyleControls = document.getElementById('subLabelStyleControls');
+  const subLabelFontSizeInput = document.getElementById('subLabelFontSizeInput');
+  const subLabelFontSizeValue = document.getElementById('subLabelFontSizeValue');
   const subLabelColorInput = document.getElementById('subLabelColorInput');
   const subLabelColorHexInput = document.getElementById('subLabelColorHexInput');
   const subLabelColorSwatchBtn = document.getElementById('subLabelColorSwatchBtn');
@@ -3418,7 +3580,14 @@
       const raw = localStorage.getItem(TEAM_KEY);
       if (!raw) return null;
       const obj = JSON.parse(raw);
-      return obj && obj.a && obj.b ? obj : null;
+      if (!obj || !obj.a || !obj.b) return null;
+      // Migration von der frueheren, team-uebergreifend EINEN
+      // Torwart-Farbe (obj.gk) auf zwei separate Farben je Team
+      // (aGk/bGk) -- alte gespeicherte Werte werden fuer beide
+      // uebernommen, statt sie zu verlieren.
+      if (!obj.aGk) obj.aGk = obj.gk || '#FFD400';
+      if (!obj.bGk) obj.bGk = obj.gk || '#FFD400';
+      return obj;
     } catch (e) { return null; }
   }
   function persistTeamColors() {
@@ -3428,22 +3597,26 @@
   function applyTeamColorSwatches() {
     swatchA.style.background = state.teamColors.a;
     swatchB.style.background = state.teamColors.b;
+    swatchAGk.style.background = state.teamColors.aGk;
+    swatchBGk.style.background = state.teamColors.bGk;
     teamASwatchBtn.style.background = state.teamColors.a;
     teamBSwatchBtn.style.background = state.teamColors.b;
-    gkSwatchBtn.style.background = state.teamColors.gk;
+    teamAGkSwatchBtn.style.background = state.teamColors.aGk;
+    teamBGkSwatchBtn.style.background = state.teamColors.bGk;
   }
 
   function refreshAllThumbs() {
     state.frames.forEach((_, i) => refreshFrameThumb(i));
   }
 
-  // 'a'/'b' = Team-Trikotfarbe, 'gk' = Torwart-Farbe (teamunabhängig, siehe
-  // Aufgabe „Torwart-Farbe“) — alle drei landen im selben state.teamColors
-  // und werden über denselben TEAM_KEY persistiert.
+  // 'a'/'b' = Team-Trikotfarbe, 'aGk'/'bGk' = jeweilige Torwart-Farbe des
+  // Teams — alle vier landen im selben state.teamColors und werden über
+  // denselben TEAM_KEY persistiert.
   const TEAM_COLOR_INPUTS = {
     a: { color: () => teamAColorInput, hex: () => teamAHexInput },
     b: { color: () => teamBColorInput, hex: () => teamBHexInput },
-    gk: { color: () => gkColorInput, hex: () => gkHexInput },
+    aGk: { color: () => teamAGkColorInput, hex: () => teamAGkHexInput },
+    bGk: { color: () => teamBGkColorInput, hex: () => teamBGkHexInput },
   };
   function setTeamColor(key, hex) {
     state.teamColors[key] = hex;
@@ -3455,27 +3628,20 @@
     refreshAllThumbs();
   }
 
-  teamAColorInput.addEventListener('input', () => setTeamColor('a', teamAColorInput.value));
-  teamBColorInput.addEventListener('input', () => setTeamColor('b', teamBColorInput.value));
-  gkColorInput.addEventListener('input', () => setTeamColor('gk', gkColorInput.value));
-  teamAHexInput.addEventListener('input', () => {
-    const h = normalizeHex(teamAHexInput.value);
-    if (isValidHex(h)) setTeamColor('a', h);
+  Object.keys(TEAM_COLOR_INPUTS).forEach((key) => {
+    const colorInput = TEAM_COLOR_INPUTS[key].color();
+    const hexInput = TEAM_COLOR_INPUTS[key].hex();
+    colorInput.addEventListener('input', () => setTeamColor(key, colorInput.value));
+    hexInput.addEventListener('input', () => {
+      const h = normalizeHex(hexInput.value);
+      if (isValidHex(h)) setTeamColor(key, h);
+    });
+    hexInput.addEventListener('blur', () => { hexInput.value = state.teamColors[key].toUpperCase(); });
   });
-  teamBHexInput.addEventListener('input', () => {
-    const h = normalizeHex(teamBHexInput.value);
-    if (isValidHex(h)) setTeamColor('b', h);
-  });
-  gkHexInput.addEventListener('input', () => {
-    const h = normalizeHex(gkHexInput.value);
-    if (isValidHex(h)) setTeamColor('gk', h);
-  });
-  teamAHexInput.addEventListener('blur', () => { teamAHexInput.value = state.teamColors.a.toUpperCase(); });
-  teamBHexInput.addEventListener('blur', () => { teamBHexInput.value = state.teamColors.b.toUpperCase(); });
-  gkHexInput.addEventListener('blur', () => { gkHexInput.value = state.teamColors.gk.toUpperCase(); });
   setupTogglePopover(teamASwatchBtn, teamAColorPopover);
   setupTogglePopover(teamBSwatchBtn, teamBColorPopover);
-  setupTogglePopover(gkSwatchBtn, gkColorPopover);
+  setupTogglePopover(teamAGkSwatchBtn, teamAGkColorPopover);
+  setupTogglePopover(teamBGkSwatchBtn, teamBGkColorPopover);
 
   /* ============================================================
      Team-Namen — frei vergebbare Namen für Team A/B (z. B. der eigene
@@ -3501,28 +3667,73 @@
   function applyTeamNameLabels() {
     const nameA = state.teamNames.a.trim() || 'Team A';
     const nameB = state.teamNames.b.trim() || 'Team B';
-    playerABtnName.textContent = nameA;
-    playerBBtnName.textContent = nameB;
+    addPlayerABtn.title = `Spieler:in für ${nameA} hinzufügen`;
+    addGoalkeeperABtn.title = `Torwart:in für ${nameA} hinzufügen`;
+    addPlayerBBtn.title = `Spieler:in für ${nameB} hinzufügen`;
+    addGoalkeeperBBtn.title = `Torwart:in für ${nameB} hinzufügen`;
   }
+  // Team A hat zwei Eingabefelder für denselben Namen (Taktik-Tab und
+  // Team-Tab, siehe teamInfoPanel) — beide bleiben über setTeamName immer
+  // synchron, unabhängig davon, welches gerade editiert wurde.
   function setTeamName(key, value) {
     state.teamNames[key] = value;
     applyTeamNameLabels();
     persistTeamNames();
     rebuildLayersList();
+    const inputs = key === 'a' ? [teamANameInput, teamsTabNameInput] : [teamBNameInput];
+    inputs.forEach((inp) => { if (inp.value !== value) inp.value = value; });
   }
   teamANameInput.addEventListener('input', () => setTeamName('a', teamANameInput.value));
   teamBNameInput.addEventListener('input', () => setTeamName('b', teamBNameInput.value));
+  teamsTabNameInput.addEventListener('input', () => setTeamName('a', teamsTabNameInput.value));
   teamANameInput.addEventListener('blur', () => { if (!teamANameInput.value.trim()) { teamANameInput.value = 'Team A'; setTeamName('a', 'Team A'); } });
   teamBNameInput.addEventListener('blur', () => { if (!teamBNameInput.value.trim()) { teamBNameInput.value = 'Team B'; setTeamName('b', 'Team B'); } });
+  teamsTabNameInput.addEventListener('blur', () => { if (!teamsTabNameInput.value.trim()) { teamsTabNameInput.value = 'Team A'; setTeamName('a', 'Team A'); } });
+
+  function showTeamFussballdeStatus(message, tone) {
+    teamFussballdeImportStatus.textContent = message;
+    teamFussballdeImportStatus.style.color = tone === 'error' ? 'var(--danger)' : 'var(--text-dim)';
+    teamFussballdeImportStatus.classList.toggle('hidden', !message);
+  }
+  teamFussballdeImportBtn.addEventListener('click', async () => {
+    const url = teamFussballdeUrlInput.value.trim();
+    if (!url) { showTeamFussballdeStatus('Bitte zuerst einen Fußball.de-Link einfügen.', 'error'); return; }
+    teamFussballdeImportBtn.disabled = true;
+    showTeamFussballdeStatus('Mannschaft wird geladen …', 'info');
+    try {
+      const res = await fetch('/api/fussballde-team-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        showTeamFussballdeStatus((json && json.error) || 'Die Mannschaft konnte nicht geladen werden.', 'error');
+        return;
+      }
+      const nameTrimmed = json.name.slice(0, 24);
+      setTeamName('a', nameTrimmed);
+      // Nur informativ gemerkt (siehe Kommentar bei state.teamNames) --
+      // noch nicht aktiv genutzt, soll spaeter die Gegner-Erkennung beim
+      // Partie-Import zuverlaessiger machen als der lockere Namensvergleich.
+      state.teamNames.aFussballDeTeamId = json.teamId || null;
+      persistTeamNames();
+      showTeamFussballdeStatus(`Übernommen: Team A = „${json.name}“.`, 'info');
+    } catch (e) {
+      showTeamFussballdeStatus('Die Mannschaft konnte nicht geladen werden (Netzwerkfehler).', 'error');
+    } finally {
+      teamFussballdeImportBtn.disabled = false;
+    }
+  });
 
   /* ============================================================
-     Fußball.de-Import: aus einem Partie-Link automatisch Team-A/B-Namen
-     und -Farben ableiten. Team A ist immer "unser" Team (erkannt per
-     Stichwort-Suche im Mannschaftsnamen, siehe fussballdeMyClubInput,
-     Standard "SVKT"), Team B immer der Gegner — unabhängig davon, wer
-     laut fussball.de Heim- oder Gastmannschaft ist. Die eigentliche
-     Seite wird server-seitig via /api/fussballde-import geladen (CORS
-     + Anti-Scraping-Header lassen sich aus dem iframe heraus nicht
+     Fußball.de-Import der nächsten Spielpaarung: aus einem Partie-Link
+     automatisch Name & Farbe des GEGNERS (Team B) ableiten. Team A ist
+     das eigene Team und kommt aus dem Team-Reiter (state.teamNames.a) --
+     hier wird nur noch verglichen, welches der beiden Teams auf der
+     Partie-Seite NICHT das eigene ist. Die eigentliche Seite wird
+     server-seitig via /api/fussballde-import geladen (CORS +
+     Anti-Scraping-Header lassen sich aus dem iframe heraus nicht
      umgehen); die Logos kommen von dort bereits als data:-URLs zurück,
      damit sie hier per <canvas> pixelgenau ausgelesen werden können
      (ein direkt von fussball.de geladenes <img> würde die Canvas wegen
@@ -3530,19 +3741,20 @@
      mit einem SecurityError blockieren).
      ============================================================ */
 
-  const FUSSBALLDE_MY_CLUB_KEY = 'spielzugregie.fussballdemyclub.v1';
-  try {
-    const savedClub = localStorage.getItem(FUSSBALLDE_MY_CLUB_KEY);
-    if (savedClub) fussballdeMyClubInput.value = savedClub;
-  } catch (e) { /* ignore */ }
-  fussballdeMyClubInput.addEventListener('change', () => {
-    try { localStorage.setItem(FUSSBALLDE_MY_CLUB_KEY, fussballdeMyClubInput.value.trim()); } catch (e) { /* ignore */ }
-  });
+  // Locker statt exakt, weil Fußball.de-Mannschaftsnamen leicht variieren
+  // koennen (z. B. eigener Teamname "SVKT 07 Minden" vs. "SVKT 07 Minden II"
+  // auf der Partie-Seite) — Teilstring-Vergleich in beide Richtungen.
+  function namesLooselyMatch(a, b) {
+    const na = (a || '').trim().toLowerCase();
+    const nb = (b || '').trim().toLowerCase();
+    if (!na || !nb) return false;
+    return na === nb || na.includes(nb) || nb.includes(na);
+  }
 
-  function showFussballdeStatus(message, tone) {
-    fussballdeImportStatus.textContent = message;
-    fussballdeImportStatus.style.color = tone === 'error' ? 'var(--danger)' : 'var(--text-dim)';
-    fussballdeImportStatus.classList.toggle('hidden', !message);
+  function showNextMatchStatus(message, tone) {
+    nextMatchImportStatus.textContent = message;
+    nextMatchImportStatus.style.color = tone === 'error' ? 'var(--danger)' : 'var(--text-dim)';
+    nextMatchImportStatus.classList.toggle('hidden', !message);
   }
 
   // Liest die dominante, nicht-weiße/nicht-transparente Farbe aus einem
@@ -3588,14 +3800,17 @@
     });
   }
 
-  fussballdeImportBtn.addEventListener('click', async () => {
-    const url = fussballdeUrlInput.value.trim();
-    if (!url) { showFussballdeStatus('Bitte zuerst einen Fußball.de-Link einfügen.', 'error'); return; }
-    const clubKeyword = (fussballdeMyClubInput.value || '').trim().toLowerCase();
-    if (!clubKeyword) { showFussballdeStatus('Bitte das Erkennungs-Stichwort für „mein Team“ ausfüllen.', 'error'); return; }
+  nextMatchImportBtn.addEventListener('click', async () => {
+    const url = nextMatchUrlInput.value.trim();
+    if (!url) { showNextMatchStatus('Bitte zuerst einen Fußball.de-Link einfügen.', 'error'); return; }
+    const myName = (state.teamNames.a || '').trim();
+    if (!myName || myName === 'Team A') {
+      showNextMatchStatus('Bitte zuerst im Team-Reiter den Namen für Team A (euer Team) festlegen.', 'error');
+      return;
+    }
 
-    fussballdeImportBtn.disabled = true;
-    showFussballdeStatus('Partie wird geladen …', 'info');
+    nextMatchImportBtn.disabled = true;
+    showNextMatchStatus('Partie wird geladen …', 'info');
     try {
       const res = await fetch('/api/fussballde-import', {
         method: 'POST',
@@ -3604,47 +3819,39 @@
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json) {
-        showFussballdeStatus((json && json.error) || 'Die Partie konnte nicht geladen werden.', 'error');
+        showNextMatchStatus((json && json.error) || 'Die Partie konnte nicht geladen werden.', 'error');
         return;
       }
 
-      const homeMatches = json.home.name.toLowerCase().includes(clubKeyword);
-      const awayMatches = json.away.name.toLowerCase().includes(clubKeyword);
-      let mine, opponent;
-      if (homeMatches && !awayMatches) { mine = json.home; opponent = json.away; }
-      else if (awayMatches && !homeMatches) { mine = json.away; opponent = json.home; }
-      else if (homeMatches && awayMatches) { mine = json.home; opponent = json.away; }
+      const homeIsMine = namesLooselyMatch(json.home.name, myName);
+      const awayIsMine = namesLooselyMatch(json.away.name, myName);
+      let opponent;
+      if (homeIsMine && !awayIsMine) opponent = json.away;
+      else if (awayIsMine && !homeIsMine) opponent = json.home;
       else {
-        showFussballdeStatus(
-          `Konnte anhand von „${fussballdeMyClubInput.value.trim()}“ nicht erkennen, welches Team eures ist (gefunden: „${json.home.name}“ vs. „${json.away.name}“). Stichwort oben anpassen und erneut versuchen.`,
+        showNextMatchStatus(
+          `Konnte anhand von „${myName}“ (Team A) nicht erkennen, welches der beiden Teams der Gegner ist (gefunden: „${json.home.name}“ vs. „${json.away.name}“).`,
           'error'
         );
         return;
       }
 
-      // Auf die maxlength der Namensfelder (24) trimmen, damit ein langer
+      // Auf die maxlength des Namensfelds (24) trimmen, damit ein langer
       // Fußball.de-Mannschaftsname (der per JS ohne maxlength-Limit
       // gesetzt würde) nicht unbemerkt länger als sonst möglich wird.
-      const myNameTrimmed = mine.name.slice(0, 24);
       const opponentNameTrimmed = opponent.name.slice(0, 24);
-      teamANameInput.value = myNameTrimmed;
-      setTeamName('a', myNameTrimmed);
       teamBNameInput.value = opponentNameTrimmed;
       setTeamName('b', opponentNameTrimmed);
 
-      const [colorA, colorB] = await Promise.all([
-        extractDominantColorFromDataUrl(mine.logoDataUrl),
-        extractDominantColorFromDataUrl(opponent.logoDataUrl),
-      ]);
-      if (colorA) setTeamColor('a', colorA);
+      const colorB = await extractDominantColorFromDataUrl(opponent.logoDataUrl);
       if (colorB) setTeamColor('b', colorB);
 
-      const colorNote = (!colorA || !colorB) ? ' (Farbe aus mind. einem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
-      showFussballdeStatus(`Übernommen: Team A = „${mine.name}“, Team B = „${opponent.name}“.${colorNote}`, colorNote ? 'error' : 'info');
+      const colorNote = !colorB ? ' (Farbe aus dem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
+      showNextMatchStatus(`Übernommen: Team B = „${opponent.name}“.${colorNote}`, colorNote ? 'error' : 'info');
     } catch (e) {
-      showFussballdeStatus('Die Partie konnte nicht geladen werden (Netzwerkfehler).', 'error');
+      showNextMatchStatus('Die Partie konnte nicht geladen werden (Netzwerkfehler).', 'error');
     } finally {
-      fussballdeImportBtn.disabled = false;
+      nextMatchImportBtn.disabled = false;
     }
   });
 
@@ -3737,6 +3944,7 @@
     if (mode === 'first') return p.firstName || '';
     if (mode === 'both') return [p.firstName, p.lastName].filter(Boolean).join(' ');
     if (mode === 'nickname') return p.nickname || '';
+    if (mode === 'initials') return p.initials || defaultInitials(p.firstName, p.lastName);
     return p.lastName || '';
   }
   function subLabelForRosterPlayer(p) { return computeSubLabel(p, subLabelMode); }
@@ -3944,7 +4152,10 @@
   // siehe rosterTableHeadRow-Handler weiter unten). Unabhängig von
   // rosterSortedByNumber(), das weiterhin die feste Trikotnummer-Sortierung
   // für die Drag&Drop-Kurzliste im Taktik-Reiter liefert.
-  let rosterSort = { key: 'number', dir: 'asc' };
+  // Standard: Status zuerst (Startelf oben, dann Auswechselspieler:in,
+  // Ausgeblendet, Verletzt), je Gruppe chronologisch nach Rückennummer
+  // (siehe Sekundärsortierung in rosterSortedForTable).
+  let rosterSort = { key: 'status', dir: 'asc' };
   const ROSTER_SORT_LABELS = {
     number: 'Nr.', firstName: 'Vorname', lastName: 'Nachname', nickname: 'Spitzname',
     initials: 'Kürzel', position1: 'Position 1', position2: 'Position 2',
@@ -3972,7 +4183,13 @@
       const cmp = typeof av === 'number' && typeof bv === 'number'
         ? av - bv
         : String(av).localeCompare(String(bv), 'de');
-      return cmp * sign;
+      if (cmp !== 0) return cmp * sign;
+      // Innerhalb gleicher Primärwerte (z. B. gleicher Status) immer
+      // chronologisch nach Rückennummer, unabhängig von der gewählten
+      // Sortierrichtung — sonst würde eine Statusgruppe bei "absteigend"
+      // ebenfalls rückwärts nach Nummer sortiert wirken.
+      const an = rosterSortValue(a, 'number'), bn = rosterSortValue(b, 'number');
+      return an - bn;
     });
   }
   function updateRosterSortHeaderUI() {
@@ -4043,7 +4260,20 @@
       // ersetzt den frueheren Stift-Button.
       tr.addEventListener('click', () => startEditRoster(p.id));
 
-      const tdNum = document.createElement('td'); tdNum.textContent = p.number == null ? '—' : String(p.number);
+      const tdNum = document.createElement('td');
+      if (p.number == null) {
+        tdNum.textContent = '—';
+      } else {
+        // Rückennummer als farbiger Kreis-Chip (Team-/Torwart-Farbe des
+        // Teambereichs), statt reinem Text -- passt visuell zu den
+        // Team-Farbfeldern im Taktik-Reiter.
+        const isGk = p.position1 === 'TW' || p.position2 === 'TW';
+        const badge = document.createElement('span');
+        badge.className = 'roster-number-badge';
+        badge.style.background = isGk ? state.teamColors.aGk : state.teamColors.a;
+        badge.textContent = String(p.number);
+        tdNum.appendChild(badge);
+      }
       const tdFirst = document.createElement('td'); tdFirst.textContent = p.firstName || '';
       const tdLast = document.createElement('td'); tdLast.textContent = p.lastName || '';
       const tdNick = document.createElement('td'); tdNick.textContent = p.nickname || '—';
@@ -4184,10 +4414,6 @@
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); rosterSaveBtn.click(); }
     });
-  });
-  subLabelModeSelect.addEventListener('change', () => {
-    subLabelMode = subLabelModeSelect.value;
-    persistSubLabelMode();
   });
 
   /* ============================================================
@@ -4928,7 +5154,7 @@
      Elements: add / select / delete / label / marker style
      ============================================================ */
 
-  function addElement(type, team, shape) {
+  function addElement(type, team, shape, isGoalkeeper) {
     if (type === 'ball' && state.elements.some((e) => e.type === 'ball')) {
       selectElement(state.elements.find((e) => e.type === 'ball').id);
       return;
@@ -4940,6 +5166,7 @@
       label = String(count + 1);
     }
     const el = { id, type, team: team || null, label };
+    if (type === 'player' && isGoalkeeper) el.isGoalkeeper = true;
     if (type === 'marker') {
       el.shape = shape || 'circle';
       el.w = MARKER_DEFAULT_M;
@@ -5011,9 +5238,12 @@
       subLabelSource: subLabelMode,
     };
     // Torwart-Farbe: automatisch angewendet, wenn Position 1 oder 2 "TW"
-    // ist — weiterhin frei über die Füllfarbe im Inspector überschreibbar
-    // (siehe playerControls/playerFillInput).
-    if (p.position1 === 'TW' || p.position2 === 'TW') el.fillColor = state.teamColors.gk;
+    // ist — als Flag statt fester Farb-Momentaufnahme, damit eine spätere
+    // Änderung der Torwart-Farbe (jetzt separat je Team, siehe
+    // resolvePlayerFillColor) sich auch auf bereits platzierte
+    // Torwart-Icons auswirkt. Weiterhin frei über die Füllfarbe im
+    // Inspector überschreibbar (siehe playerControls/playerFillInput).
+    if (p.position1 === 'TW' || p.position2 === 'TW') el.isGoalkeeper = true;
     state.elements.push(el);
     for (const frame of state.frames) frame.pos[id] = { ...pct };
     selectElement(id);
@@ -5304,7 +5534,7 @@
 
     if (el.type === 'player') {
       playerControls.classList.remove('hidden');
-      const pFill = el.fillColor || (el.team === 'A' ? state.teamColors.a : state.teamColors.b);
+      const pFill = resolvePlayerFillColor(el, state.teamColors);
       playerFillInput.value = pFill;
       playerFillHexInput.value = pFill.toUpperCase();
       playerFillSwatchBtn.style.background = pFill;
@@ -5319,6 +5549,10 @@
       subLabelField.classList.remove('hidden');
       subLabelInput.value = el.subLabel || '';
       subLabelStyleControls.classList.remove('hidden');
+      const sFontSize = el.subLabelFontSize != null ? el.subLabelFontSize : 12;
+      subLabelFontSizeInput.value = sFontSize;
+      subLabelFontSizeValue.textContent = String(sFontSize);
+      updateRangeFill(subLabelFontSizeInput);
       const sColor = el.subLabelColor || '#FFFFFF';
       subLabelColorInput.value = sColor;
       subLabelColorHexInput.value = sColor.toUpperCase();
@@ -5435,6 +5669,8 @@
       const type = btn.dataset.add;
       if (type === 'playerA') addElement('player', 'A');
       else if (type === 'playerB') addElement('player', 'B');
+      else if (type === 'goalkeeperA') addElement('player', 'A', null, true);
+      else if (type === 'goalkeeperB') addElement('player', 'B', null, true);
     });
   });
 
@@ -5626,6 +5862,12 @@
       el.subLabel = computeSubLabel(p, el.subLabelSource);
       subLabelInput.value = el.subLabel;
     });
+  });
+
+  subLabelFontSizeInput.addEventListener('input', () => {
+    subLabelFontSizeValue.textContent = subLabelFontSizeInput.value;
+    updateRangeFill(subLabelFontSizeInput);
+    withSelectedPlayer((el) => { el.subLabelFontSize = parseInt(subLabelFontSizeInput.value, 10); });
   });
 
   setupTogglePopover(subLabelColorSwatchBtn, subLabelColorPopover);
@@ -7350,69 +7592,6 @@
     renderLibraryList();
   }
 
-  exportLibraryBtn.addEventListener('click', async () => {
-    // Exporting is the other explicit "close" point (besides starting a
-    // new tactic / switching to a different one) at which the GIF
-    // preview of the tactic currently being edited is refreshed, so the
-    // exported file reflects the latest state rather than a possibly
-    // stale preview from whenever it was last regenerated.
-    libraryStatus.textContent = 'Vorschau wird aktualisiert…';
-    await closeActiveEntryGif();
-    // Der Kader ist im selben Export enthalten wie die Bibliothek — ein
-    // Gerätewechsel soll nicht getrennt für Taktiken und Kader gemacht
-    // werden müssen. "roster" ist ein zusätzliches, optionales Feld, ein
-    // älterer Export ohne dieses Feld bleibt beim Import unproblematisch.
-    const json = JSON.stringify({ version: 1, exportedAt: Date.now(), entries: library, roster }, null, 2);
-    const downloads = await getDownloadsApi();
-    if (!downloads) { libraryStatus.textContent = 'Download in dieser Ansicht nicht verfügbar.'; return; }
-    try {
-      await downloads.save({ filename: 'spielzug-bibliothek.json', data: json });
-      libraryStatus.textContent = `Bibliothek exportiert (${library.length} Einträge, ${roster.length} Kadermitglieder).`;
-    } catch (err) {
-      libraryStatus.textContent = downloadErrorMessage(err);
-    }
-  });
-
-  importLibraryBtn.addEventListener('click', () => importLibraryFile.click());
-  importLibraryFile.addEventListener('change', async () => {
-    const file = importLibraryFile.files && importLibraryFile.files[0];
-    importLibraryFile.value = '';
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      const entries = Array.isArray(data) ? data : (Array.isArray(data.entries) ? data.entries : null);
-      if (!entries) throw new Error('invalid');
-      let added = 0;
-      for (const e of entries) {
-        if (!e || !e.elements || !e.frames) continue;
-        const exists = library.some((x) => x.id === e.id);
-        library.push(exists ? Object.assign({}, e, { id: genId() }) : e);
-        added++;
-      }
-      persistLibrary();
-      renderFolderMenu();
-      renderLibraryList();
-      let rosterAdded = 0;
-      if (Array.isArray(data.roster)) {
-        for (const p of data.roster) {
-          if (!p || !p.firstName || !p.lastName) continue;
-          const exists = roster.some((x) => x.id === p.id);
-          roster.push(exists ? Object.assign({}, p, { id: genRosterId() }) : p);
-          rosterAdded++;
-        }
-        persistRoster();
-        renderRosterList();
-        renderRosterQuickList();
-      }
-      libraryStatus.textContent = rosterAdded > 0
-        ? `${added} Eintrag/Einträge und ${rosterAdded} Kadermitglieder importiert.`
-        : `${added} Eintrag/Einträge importiert.`;
-    } catch (err) {
-      libraryStatus.textContent = 'Import fehlgeschlagen — ungültige Datei.';
-    }
-  });
-
   /* ============================================================
      Auto-Save — jede inhaltliche Änderung landet ohne Zutun des
      Trainers in der Bibliothek. Die reinen Daten (Elemente/Frames/
@@ -7684,26 +7863,26 @@
 
   const savedTeamColors = loadTeamColors();
   if (savedTeamColors) state.teamColors = savedTeamColors;
-  // Ältere gespeicherte Team-Farben (vor der Torwart-Farbe) haben noch
-  // kein `gk` — dann greift der Standardwert aus dem state-Objekt oben.
-  if (!state.teamColors.gk) state.teamColors.gk = '#FFD400';
-  teamAColorInput.value = state.teamColors.a;
-  teamAHexInput.value = state.teamColors.a.toUpperCase();
-  teamBColorInput.value = state.teamColors.b;
-  teamBHexInput.value = state.teamColors.b.toUpperCase();
-  gkColorInput.value = state.teamColors.gk;
-  gkHexInput.value = state.teamColors.gk.toUpperCase();
+  // Aeltere gespeicherte Team-Farben (vor der separaten Torwart-Farbe je
+  // Team) haben noch kein aGk/bGk — dann greifen die Standardwerte aus
+  // dem state-Objekt oben.
+  if (!state.teamColors.aGk) state.teamColors.aGk = '#FFD400';
+  if (!state.teamColors.bGk) state.teamColors.bGk = '#FFD400';
+  Object.keys(TEAM_COLOR_INPUTS).forEach((key) => {
+    TEAM_COLOR_INPUTS[key].color().value = state.teamColors[key];
+    TEAM_COLOR_INPUTS[key].hex().value = state.teamColors[key].toUpperCase();
+  });
   applyTeamColorSwatches();
 
   const savedTeamNames = loadTeamNames();
   if (savedTeamNames) state.teamNames = savedTeamNames;
   teamANameInput.value = state.teamNames.a;
   teamBNameInput.value = state.teamNames.b;
+  teamsTabNameInput.value = state.teamNames.a;
   applyTeamNameLabels();
 
   const savedSubLabelMode = loadSubLabelMode();
   if (savedSubLabelMode) subLabelMode = savedSubLabelMode;
-  subLabelModeSelect.value = subLabelMode;
 
   loadScenario(buildSingleFrameScenario());
 
