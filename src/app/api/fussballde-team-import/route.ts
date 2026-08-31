@@ -2,21 +2,53 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Liest eine Fussball.de-Mannschaftsseite (nicht Spielseite -- siehe
 // /api/fussballde-import fuer Partien) serverseitig aus und extrahiert
-// Team-Name und -ID, damit der Editor daraus automatisch den Namen fuer
-// Team A (das eigene Team) uebernehmen kann. Die ID wird mitgeliefert,
-// weil sie spaeter fuer eine zuverlaessigere Gegner-Erkennung beim
-// Partie-Import nuetzlich werden kann.
+// Team-Name, -ID und Vereinslogo, damit der Editor daraus automatisch
+// Name UND Farbe fuer Team A (das eigene Team) uebernehmen kann -- das
+// ist die "Prio 1"-Farbquelle fuer Team A: ist ein Team-Link hinterlegt,
+// wird IMMER von hier aus die Farbe gezogen statt aus einer einzelnen
+// Partie (die "Prio 2"-Quelle, siehe /api/fussballde-import).
+//
+// Eine Mannschaftsseite listet viele Vereinslogos (Tabelle, naechste
+// Spiele der Liga usw.), die alle "format/0" nutzen -- anders als bei
+// einer Partie-Seite ist das Format hier also NICHT eindeutig. Das
+// eigene Vereinslogo im Seitenkopf ist aber die einzige <img> mit dem
+// woertlichen alt="logo" (alle anderen Logos tragen den jeweiligen
+// Vereinsnamen als alt-Text) -- damit laesst es sich trotzdem eindeutig
+// herausgreifen.
 const FUSSBALLDE_HOST_RE = /(^|\.)fussball\.de$/i;
 const FETCH_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
 export const maxDuration = 10;
 const PAGE_FETCH_TIMEOUT_MS = 6000;
+const LOGO_FETCH_TIMEOUT_MS = 2500;
 
 function extractVar(html: string, varName: string): string | null {
   const m = html.match(new RegExp(`${varName}='([^']*)'`));
   const value = m?.[1]?.trim();
   return value ? value : null;
+}
+
+function extractOwnLogoUrl(html: string): string | null {
+  const m = html.match(/<img src="([^"]+)" alt="logo">/);
+  if (!m) return null;
+  const url = m[1];
+  return url.startsWith("//") ? `https:${url}` : url;
+}
+
+async function fetchLogoAsDataUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": FETCH_USER_AGENT },
+      signal: AbortSignal.timeout(LOGO_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "image/png";
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -82,7 +114,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ name, teamId });
+    const ownLogoUrl = extractOwnLogoUrl(html);
+    const logoDataUrl = ownLogoUrl ? await fetchLogoAsDataUrl(ownLogoUrl) : null;
+
+    return NextResponse.json({ name, teamId, logoDataUrl });
   } catch (e) {
     console.error("fussballde-team-import: unerwarteter Fehler", e);
     return NextResponse.json(

@@ -3569,6 +3569,49 @@
     });
   }
 
+  // Wie confirmModal, aber mit mehr als einer Auswahlmöglichkeit (jede
+  // eigene Zeile) statt nur Bestätigen/Abbrechen — z. B. beim
+  // Partie-Import, wenn nicht erkennbar ist, welches der beiden Teams
+  // das eigene ist (siehe nextMatchImportBtn-Handler).
+  function chooseModal({ title, text, options, cancelLabel }) {
+    return new Promise((resolve) => {
+      modalBox.innerHTML = '';
+      const h = document.createElement('div'); h.className = 'modal-title'; h.textContent = title;
+      const p = document.createElement('div'); p.className = 'modal-text'; p.textContent = text;
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      actions.style.flexDirection = 'column';
+      actions.style.alignItems = 'stretch';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn btn-ghost';
+      cancelBtn.textContent = cancelLabel || 'Abbrechen';
+      const optionBtns = options.map((opt) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-accent';
+        btn.textContent = opt.label;
+        return btn;
+      });
+      actions.append(...optionBtns, cancelBtn);
+      modalBox.append(h, p, actions);
+      modalOverlay.classList.remove('hidden');
+      (optionBtns[0] || cancelBtn).focus();
+
+      function finish(value) {
+        modalOverlay.removeEventListener('keydown', onKey);
+        closeModal();
+        resolve(value);
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); finish(null); }
+      }
+      optionBtns.forEach((btn, i) => btn.addEventListener('click', () => finish(options[i].value)));
+      cancelBtn.addEventListener('click', () => finish(null));
+      modalOverlay.addEventListener('keydown', onKey);
+    });
+  }
+
   /* ============================================================
      Team colors
      ============================================================ */
@@ -3713,12 +3756,20 @@
       }
       const nameTrimmed = json.name.slice(0, 24);
       setTeamName('a', nameTrimmed);
-      // Nur informativ gemerkt (siehe Kommentar bei state.teamNames) --
-      // noch nicht aktiv genutzt, soll spaeter die Gegner-Erkennung beim
-      // Partie-Import zuverlaessiger machen als der lockere Namensvergleich.
+      // Merkt sich, dass ein Team-Link hinterlegt ist -- das ist die
+      // "Prio 1"-Farbquelle für Team A: ein späterer Partie-Import
+      // ("Nächste Spielpaarung") lässt Team As Farbe dann unangetastet
+      // statt sie aus der Partie neu zu ziehen (siehe dortiger Handler).
+      // Die ID selbst ist noch nicht aktiv genutzt, soll aber später auch
+      // die Gegner-Erkennung zuverlässiger machen als der lockere
+      // Namensvergleich.
       state.teamNames.aFussballDeTeamId = json.teamId || null;
       persistTeamNames();
-      showTeamFussballdeStatus(`Übernommen: Team A = „${json.name}“.`, 'info');
+
+      const colorA = await extractDominantColorFromDataUrl(json.logoDataUrl);
+      if (colorA) setTeamColor('a', colorA);
+      const colorNote = !colorA ? ' (Farbe aus dem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
+      showTeamFussballdeStatus(`Übernommen: Team A = „${json.name}“.${colorNote}`, colorNote ? 'error' : 'info');
     } catch (e) {
       showTeamFussballdeStatus('Die Mannschaft konnte nicht geladen werden (Netzwerkfehler).', 'error');
     } finally {
@@ -3825,15 +3876,37 @@
 
       const homeIsMine = namesLooselyMatch(json.home.name, myName);
       const awayIsMine = namesLooselyMatch(json.away.name, myName);
-      let opponent;
-      if (homeIsMine && !awayIsMine) opponent = json.away;
-      else if (awayIsMine && !homeIsMine) opponent = json.home;
+      let mine = null, opponent;
+      if (homeIsMine && !awayIsMine) { mine = json.home; opponent = json.away; }
+      else if (awayIsMine && !homeIsMine) { mine = json.away; opponent = json.home; }
       else {
-        showNextMatchStatus(
-          `Konnte anhand von „${myName}“ (Team A) nicht erkennen, welches der beiden Teams der Gegner ist (gefunden: „${json.home.name}“ vs. „${json.away.name}“).`,
-          'error'
-        );
-        return;
+        // Keins oder beide Teams passen zu Team A — nachfragen statt zu
+        // raten, ob diese Partie überhaupt das eigene Team betrifft.
+        const choice = await chooseModal({
+          title: 'Ist euer Team an dieser Partie beteiligt?',
+          text: `Konnte anhand von „${myName}“ (Team A) nicht erkennen, welches der beiden Teams eures ist (gefunden: „${json.home.name}“ vs. „${json.away.name}“). Wie soll weiter vorgegangen werden?`,
+          options: [
+            { label: `Beide Teams übernehmen (Team A wird durch „${json.home.name}“ ersetzt, Team B durch „${json.away.name}“)`, value: 'overwrite' },
+            { label: `„${json.home.name}“ als Team B übernehmen (Team A bleibt „${myName}“)`, value: 'home' },
+            { label: `„${json.away.name}“ als Team B übernehmen (Team A bleibt „${myName}“)`, value: 'away' },
+          ],
+        });
+        if (!choice) { showNextMatchStatus('Import abgebrochen.', 'info'); return; }
+        if (choice === 'overwrite') {
+          const [colorHomeOverwrite, colorAwayOverwrite] = await Promise.all([
+            extractDominantColorFromDataUrl(json.home.logoDataUrl),
+            extractDominantColorFromDataUrl(json.away.logoDataUrl),
+          ]);
+          const homeNameTrimmed = json.home.name.slice(0, 24);
+          const awayNameTrimmed = json.away.name.slice(0, 24);
+          setTeamName('a', homeNameTrimmed);
+          setTeamName('b', awayNameTrimmed);
+          if (colorHomeOverwrite) setTeamColor('a', colorHomeOverwrite);
+          if (colorAwayOverwrite) setTeamColor('b', colorAwayOverwrite);
+          showNextMatchStatus(`Übernommen: Team A = „${json.home.name}“, Team B = „${json.away.name}“.`, 'info');
+          return;
+        }
+        opponent = choice === 'home' ? json.home : json.away;
       }
 
       // Auf die maxlength des Namensfelds (24) trimmen, damit ein langer
@@ -3843,6 +3916,14 @@
       teamBNameInput.value = opponentNameTrimmed;
       setTeamName('b', opponentNameTrimmed);
 
+      // Team-A-Farbe nur anfassen, wenn kein Team-Link hinterlegt ist
+      // (siehe teamFussballdeImportBtn-Handler) -- der hat immer Prio 1
+      // als Farbquelle für Team A, eine einzelne Partie nur Prio 2.
+      let colorA = null;
+      if (!state.teamNames.aFussballDeTeamId && mine) {
+        colorA = await extractDominantColorFromDataUrl(mine.logoDataUrl);
+        if (colorA) setTeamColor('a', colorA);
+      }
       const colorB = await extractDominantColorFromDataUrl(opponent.logoDataUrl);
       if (colorB) setTeamColor('b', colorB);
 
