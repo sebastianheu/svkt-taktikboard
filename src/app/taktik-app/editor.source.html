@@ -1105,7 +1105,12 @@
     padding: 0 10px 8px;
     border-bottom: 1px solid var(--border-strong);
     vertical-align: middle;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
   }
+  .roster-table th:hover { color: var(--text); }
+  .roster-table th .sort-indicator { margin-left: 4px; opacity: 0.7; }
   .roster-table td {
     padding: 9px 10px;
     border-bottom: 1px solid var(--border);
@@ -1114,15 +1119,32 @@
     vertical-align: middle;
   }
   .roster-table tbody tr:last-child td { border-bottom: none; }
+  /* Zeile (ausser den Status-Buttons selbst) oeffnet per Klick die
+     Bearbeiten-Maske oben — ersetzt den frueheren Stift-Button. */
+  .roster-table tbody tr { cursor: pointer; }
   .roster-table tbody tr:hover { background: var(--surface-2); }
+  /* Leichte Einfaerbung je Status (siehe rosterStatusOf) -- :hover danach
+     definiert, damit die Farbe auch beim Hovern erhalten bleibt (nur
+     etwas kraeftiger) statt vom neutralen Hover-Grau ueberdeckt zu werden. */
+  .roster-table tbody tr.roster-row-start { background: rgba(52,199,110,0.10); }
+  .roster-table tbody tr.roster-row-start:hover { background: rgba(52,199,110,0.16); }
+  .roster-table tbody tr.roster-row-bench { background: rgba(219,182,85,0.10); }
+  .roster-table tbody tr.roster-row-bench:hover { background: rgba(219,182,85,0.16); }
+  .roster-table tbody tr.roster-row-hidden { background: rgba(159,176,204,0.10); }
+  .roster-table tbody tr.roster-row-hidden:hover { background: rgba(159,176,204,0.16); }
+  .roster-table tbody tr.roster-row-injured { background: rgba(229,72,77,0.10); }
+  .roster-table tbody tr.roster-row-injured:hover { background: rgba(229,72,77,0.16); }
+  /* Zeile, deren Daten gerade oben im Formular zum Bearbeiten geladen sind. */
+  .roster-table tbody tr.roster-row-editing { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-  /* Startelf(11)/Verletzt/Ausblenden/Bearbeiten/Löschen — alle fünf
-     Buttons einer Zeile in einer einzigen, nicht umbrechenden Reihe
-     (siehe roster-table-wrap: overflow-x:auto sorgt bei zu wenig Platz
-     für horizontales Scrollen statt eines Zeilenumbruchs). */
-  .roster-flags-cell { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; }
-  /* Gleiche Groesse wie .icon-btn (Bearbeiten/Loeschen), damit alle fünf
-     Buttons einer Zeile einheitlich wirken. */
+  /* Startelf(11)/Auswechselspieler:in/Ausgeblendet/Verletzt — vier
+     Status-Buttons einer Zeile in einer einzigen, nicht umbrechenden
+     Reihe (siehe roster-table-wrap: overflow-x:auto sorgt bei zu wenig
+     Platz für horizontales Scrollen statt eines Zeilenumbruchs). Ein
+     Klick auf einen Button darf nicht zusaetzlich die
+     Zeile-oeffnet-Bearbeiten-Maske-Logik ausloesen, siehe
+     e.stopPropagation() in den Button-Handlern. */
+  .roster-flags-cell { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; cursor: default; }
   .roster-flag-btn {
     width: 30px;
     height: 30px;
@@ -1139,14 +1161,13 @@
     font-weight: 700;
     font-size: 12px;
     line-height: 1;
+    cursor: pointer;
   }
   .roster-flag-btn:hover { background: var(--surface-3); color: var(--text); }
   .roster-flag-btn.is-active-start { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .roster-flag-btn.is-active-injured { background: rgba(229,72,77,0.16); border-color: rgba(229,72,77,0.5); color: var(--danger); }
+  .roster-flag-btn.is-active-bench { background: rgba(219,182,85,0.16); border-color: rgba(219,182,85,0.5); color: var(--accent); }
   .roster-flag-btn.is-active-hidden { background: rgba(159,176,204,0.18); border-color: var(--border-strong); color: var(--text); }
-  /* Feine Trennlinie zwischen den Status-Togglern (Startelf/Verletzt/
-     Ausblenden) und den Zeilen-Aktionen (Bearbeiten/Löschen). */
-  .roster-btn-divider { width: 1px; height: 20px; flex-shrink: 0; background: var(--border-strong); margin: 0 2px; }
+  .roster-flag-btn.is-active-injured { background: rgba(229,72,77,0.16); border-color: rgba(229,72,77,0.5); color: var(--danger); }
 
   .roster-chip-list {
     display: flex;
@@ -1738,8 +1759,16 @@
             <input type="text" id="rosterLastNameInput" maxlength="40" placeholder="z. B. Schmidt">
           </label>
           <label class="field">
+            <span>Kürzel</span>
+            <input type="text" id="rosterInitialsInput" maxlength="4" placeholder="z. B. MS">
+          </label>
+          <label class="field">
             <span>Spitzname</span>
             <input type="text" id="rosterNicknameInput" maxlength="30" placeholder="z. B. Mimi">
+          </label>
+          <label class="field">
+            <span>Geburtsdatum</span>
+            <input type="date" id="rosterBirthdateInput">
           </label>
           <label class="field">
             <span>Position 1</span>
@@ -1750,22 +1779,15 @@
             <select id="rosterPosition2Select"></select>
           </label>
           <label class="field">
-            <span>Geburtsdatum</span>
-            <input type="date" id="rosterBirthdateInput">
-          </label>
-          <label class="field">
             <span>Trikotnummer</span>
             <input type="number" id="rosterNumberInput" min="1" max="99" placeholder="z. B. 7">
-          </label>
-          <label class="field">
-            <span>Kürzel</span>
-            <input type="text" id="rosterInitialsInput" maxlength="4" placeholder="z. B. MS">
           </label>
         </div>
         <div id="rosterFormError" class="hint hidden" style="color:var(--danger);"></div>
         <div class="roster-form-actions" style="margin-top:12px;">
           <button type="button" class="btn btn-accent" id="rosterSaveBtn">Hinzufügen</button>
           <button type="button" class="btn btn-ghost hidden" id="rosterCancelEditBtn">Abbrechen</button>
+          <button type="button" class="icon-btn icon-btn-danger hidden" id="rosterDeleteBtn" style="margin-left:auto;" title="Spieler:in löschen" aria-label="Spieler:in löschen"></button>
         </div>
       </section>
       <section class="panel" id="rosterImportPanel">
@@ -1790,13 +1812,23 @@
         <div id="rosterTableWrap" class="roster-table-wrap hidden">
           <table class="roster-table">
             <thead>
-              <tr><th>Nr.</th><th>Vorname</th><th>Nachname</th><th>Spitzname</th><th>Kürzel</th><th>Position</th><th>Geburtsdatum</th><th title="Startelf (max. 11) / Verletzt / Ausgeblendet / Bearbeiten / Löschen">Status</th></tr>
+              <tr id="rosterTableHeadRow">
+                <th data-sort-key="number">Nr.</th>
+                <th data-sort-key="firstName">Vorname</th>
+                <th data-sort-key="lastName">Nachname</th>
+                <th data-sort-key="nickname">Spitzname</th>
+                <th data-sort-key="initials">Kürzel</th>
+                <th data-sort-key="position1">Position 1</th>
+                <th data-sort-key="position2">Position 2</th>
+                <th data-sort-key="birthdate">Geburtsdatum</th>
+                <th data-sort-key="status" title="Startelf / Auswechselspieler:in / Ausgeblendet / Verletzt">Status</th>
+              </tr>
             </thead>
             <tbody id="rosterTableBody"></tbody>
           </table>
         </div>
         <div id="rosterStartingLimitHint" class="hint hidden" style="color:var(--warn-strong); margin-top:8px;">Es können höchstens 11 Spieler:innen gleichzeitig als Startelf markiert werden.</div>
-        <div class="hint" style="margin-top:10px;">Wird automatisch gespeichert und ist auf all deinen Geräten verfügbar.</div>
+        <div class="hint" style="margin-top:10px;">Wird automatisch gespeichert und ist auf all deinen Geräten verfügbar. Auf eine Spaltenüberschrift klicken sortiert danach, auf eine Zeile klicken lädt die Daten oben zum Bearbeiten.</div>
       </section>
     </div>
   </div>
@@ -3194,6 +3226,7 @@
   const rosterFormError = document.getElementById('rosterFormError');
   const rosterSaveBtn = document.getElementById('rosterSaveBtn');
   const rosterCancelEditBtn = document.getElementById('rosterCancelEditBtn');
+  const rosterDeleteBtn = document.getElementById('rosterDeleteBtn');
   const rosterCount = document.getElementById('rosterCount');
   const rosterDeleteAllBtn = document.getElementById('rosterDeleteAllBtn');
   const rosterLoadError = document.getElementById('rosterLoadError');
@@ -3201,6 +3234,7 @@
   const rosterEmpty = document.getElementById('rosterEmpty');
   const rosterTableWrap = document.getElementById('rosterTableWrap');
   const rosterTableBody = document.getElementById('rosterTableBody');
+  const rosterTableHeadRow = document.getElementById('rosterTableHeadRow');
   const rosterStartingLimitHint = document.getElementById('rosterStartingLimitHint');
   const rosterImportBtn = document.getElementById('rosterImportBtn');
   const rosterImportFile = document.getElementById('rosterImportFile');
@@ -3805,6 +3839,30 @@
     return '—';
   }
 
+  // Status ist exklusiv: jede·r Spieler·in hat genau einen von vier
+  // Zuständen. Statt eines eigenen DB-Felds wird das weiter über die drei
+  // bestehenden Booleans abgebildet (starting/injured/hidden) -- "bench"
+  // (Auswechselspieler:in) ist einfach der Zustand, in dem keins der drei
+  // gesetzt ist, das ist zugleich der Default für neue Einträge. So bleibt
+  // die Datenbank-Spaltenstruktur unverändert.
+  const ROSTER_STATUS_RANK = { start: 0, bench: 1, hidden: 2, injured: 3 };
+  function rosterStatusOf(p) {
+    if (p.starting) return 'start';
+    if (p.hidden) return 'hidden';
+    if (p.injured) return 'injured';
+    return 'bench';
+  }
+  // Klick auf den bereits aktiven Status setzt zurück auf "bench" (statt
+  // eines No-ops) -- so lässt sich ein Status auch ohne den separaten
+  // Bank-Button wieder aufheben, wie es das vorherige Toggle-Verhalten von
+  // Verletzt/Ausgeblendet gewohnt war.
+  function setRosterStatus(p, status) {
+    const next = rosterStatusOf(p) === status ? 'bench' : status;
+    p.starting = next === 'start';
+    p.hidden = next === 'hidden';
+    p.injured = next === 'injured';
+  }
+
   function clearRosterForm() {
     rosterFirstNameInput.value = '';
     rosterLastNameInput.value = '';
@@ -3820,6 +3878,8 @@
     rosterFormTitle.textContent = 'Spieler:in hinzufügen';
     rosterSaveBtn.textContent = 'Hinzufügen';
     rosterCancelEditBtn.classList.add('hidden');
+    rosterDeleteBtn.classList.add('hidden');
+    renderRosterList(); // Zeilen-Hervorhebung der zuvor bearbeiteten Zeile entfernen
   }
 
   function maybeAutofillInitials() {
@@ -3847,7 +3907,9 @@
     rosterFormTitle.textContent = 'Spieler:in bearbeiten';
     rosterSaveBtn.textContent = 'Speichern';
     rosterCancelEditBtn.classList.remove('hidden');
+    rosterDeleteBtn.classList.remove('hidden');
     rosterFirstNameInput.focus();
+    renderRosterList(); // bearbeitete Zeile hervorheben
   }
 
   function deleteRosterEntry(id) {
@@ -3878,6 +3940,80 @@
     deleteAllRosterEntries();
   });
 
+  // Sortierstatus der Kaderliste-Tabelle (Klick auf eine Spaltenüberschrift,
+  // siehe rosterTableHeadRow-Handler weiter unten). Unabhängig von
+  // rosterSortedByNumber(), das weiterhin die feste Trikotnummer-Sortierung
+  // für die Drag&Drop-Kurzliste im Taktik-Reiter liefert.
+  let rosterSort = { key: 'number', dir: 'asc' };
+  const ROSTER_SORT_LABELS = {
+    number: 'Nr.', firstName: 'Vorname', lastName: 'Nachname', nickname: 'Spitzname',
+    initials: 'Kürzel', position1: 'Position 1', position2: 'Position 2',
+    birthdate: 'Geburtsdatum', status: 'Status',
+  };
+  function rosterSortValue(p, key) {
+    switch (key) {
+      case 'number': return p.number == null ? Infinity : p.number;
+      case 'firstName': return (p.firstName || '').toLowerCase();
+      case 'lastName': return (p.lastName || '').toLowerCase();
+      case 'nickname': return (p.nickname || '').toLowerCase();
+      case 'initials': return (p.initials || '').toLowerCase();
+      case 'position1': return (p.position1 || '').toLowerCase();
+      case 'position2': return (p.position2 || '').toLowerCase();
+      case 'birthdate': return toDateOnlyString(p.birthdate) || '';
+      case 'status': return ROSTER_STATUS_RANK[rosterStatusOf(p)];
+      default: return 0;
+    }
+  }
+  function rosterSortedForTable() {
+    const { key, dir } = rosterSort;
+    const sign = dir === 'asc' ? 1 : -1;
+    return roster.slice().sort((a, b) => {
+      const av = rosterSortValue(a, key), bv = rosterSortValue(b, key);
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'de');
+      return cmp * sign;
+    });
+  }
+  function updateRosterSortHeaderUI() {
+    rosterTableHeadRow.querySelectorAll('th[data-sort-key]').forEach((th) => {
+      const key = th.dataset.sortKey;
+      const label = ROSTER_SORT_LABELS[key] || '';
+      const active = key === rosterSort.key;
+      th.textContent = label;
+      if (active) {
+        const indicator = document.createElement('span');
+        indicator.className = 'sort-indicator';
+        indicator.textContent = rosterSort.dir === 'asc' ? '▲' : '▼';
+        th.appendChild(indicator);
+      }
+    });
+  }
+  rosterTableHeadRow.querySelectorAll('th[data-sort-key]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sortKey;
+      rosterSort = key === rosterSort.key
+        ? { key, dir: rosterSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' };
+      renderRosterList();
+    });
+  });
+
+  // Icon + Titel/aria-label je Status — Klick auf einen Button setzt den
+  // exklusiven Status der Zeile (siehe setRosterStatus); ein zweiter Klick
+  // auf den bereits aktiven Button setzt zurück auf "bench".
+  const ROSTER_STATUS_BUTTON_DEFS = [
+    { status: 'start', activeClass: 'is-active-start', label: 'Startelf', text: '11',
+      title: (active) => active ? 'Aus der Startelf nehmen (zurück auf die Bank)' : 'Zur Startelf hinzufügen (max. 11 gleichzeitig)' },
+    { status: 'bench', activeClass: 'is-active-bench', label: 'Auswechselspieler:in', icon: () => ICON_BENCH,
+      title: () => 'Als Auswechselspieler:in (Bank) markieren' },
+    { status: 'hidden', activeClass: 'is-active-hidden', label: 'Ausgeblendet', icon: () => ICON_EYE,
+      title: (active) => active ? 'In der Taktik-Kaderliste wieder einblenden' : 'In der Taktik-Kaderliste ausblenden (z. B. am Spieltag nicht dabei)' },
+    { status: 'injured', activeClass: 'is-active-injured', label: 'Verletzt', icon: () => ICON_INJURED,
+      title: (active) => active ? 'Nicht mehr als verletzt markieren' : 'Als verletzt markieren' },
+  ];
+  const ROSTER_ROW_TINT_CLASS = { start: 'roster-row-start', bench: 'roster-row-bench', hidden: 'roster-row-hidden', injured: 'roster-row-injured' };
+
   function renderRosterList() {
     rosterCount.textContent = String(roster.length);
     rosterDeleteAllBtn.disabled = roster.length === 0 || rosterLoadFailed;
@@ -3887,6 +4023,7 @@
     // (siehe Kommentar bei persistRoster).
     rosterSaveBtn.disabled = rosterLoadFailed;
     rosterImportBtn.disabled = rosterLoadFailed;
+    updateRosterSortHeaderUI();
     if (roster.length === 0) {
       rosterEmpty.classList.remove('hidden');
       rosterTableWrap.classList.add('hidden');
@@ -3896,91 +4033,52 @@
     rosterEmpty.classList.add('hidden');
     rosterTableWrap.classList.remove('hidden');
     rosterTableBody.innerHTML = '';
-    rosterSortedByNumber().forEach((p) => {
+    rosterSortedForTable().forEach((p) => {
       const tr = document.createElement('tr');
+      const status = rosterStatusOf(p);
+      tr.className = ROSTER_ROW_TINT_CLASS[status];
+      if (p.id === editingRosterId) tr.classList.add('roster-row-editing');
+      // Klick irgendwo in der Zeile (ausser auf einen der Status-Buttons,
+      // siehe stopPropagation dort) öffnet die Bearbeiten-Maske oben —
+      // ersetzt den frueheren Stift-Button.
+      tr.addEventListener('click', () => startEditRoster(p.id));
+
       const tdNum = document.createElement('td'); tdNum.textContent = p.number == null ? '—' : String(p.number);
       const tdFirst = document.createElement('td'); tdFirst.textContent = p.firstName || '';
       const tdLast = document.createElement('td'); tdLast.textContent = p.lastName || '';
       const tdNick = document.createElement('td'); tdNick.textContent = p.nickname || '—';
       const tdInitials = document.createElement('td'); tdInitials.textContent = p.initials || defaultInitials(p.firstName, p.lastName) || '—';
-      const tdPos = document.createElement('td'); tdPos.textContent = formatRosterPosition(p) || '—';
+      const tdPos1 = document.createElement('td'); tdPos1.textContent = p.position1 || '—';
+      const tdPos2 = document.createElement('td'); tdPos2.textContent = p.position2 || '—';
       const tdBirth = document.createElement('td'); tdBirth.textContent = formatRosterBirthdateCell(p);
 
       const tdFlags = document.createElement('td');
       tdFlags.className = 'roster-flags-cell';
-      const startBtn = document.createElement('button');
-      startBtn.type = 'button';
-      startBtn.className = 'roster-flag-btn' + (p.starting ? ' is-active-start' : '');
-      startBtn.textContent = '11';
-      startBtn.title = p.starting ? 'Aus der Startelf nehmen' : 'Zur Startelf hinzufügen (max. 11 gleichzeitig)';
-      startBtn.setAttribute('aria-label', `Startelf${p.starting ? ' (markiert)' : ''}`);
-      startBtn.addEventListener('click', () => {
-        if (!p.starting && roster.filter((r) => r.starting).length >= 11) {
-          rosterStartingLimitHint.classList.remove('hidden');
-          clearTimeout(startBtn._hintTimer);
-          startBtn._hintTimer = setTimeout(() => rosterStartingLimitHint.classList.add('hidden'), 3500);
-          return;
-        }
-        p.starting = !p.starting;
-        persistRoster();
-        renderRosterList();
-      });
-
-      const injuredBtn = document.createElement('button');
-      injuredBtn.type = 'button';
-      injuredBtn.className = 'roster-flag-btn' + (p.injured ? ' is-active-injured' : '');
-      injuredBtn.innerHTML = ICON_INJURED;
-      injuredBtn.title = p.injured ? 'Nicht mehr als verletzt markieren' : 'Als verletzt markieren';
-      injuredBtn.setAttribute('aria-label', `Verletzt${p.injured ? ' (markiert)' : ''}`);
-      injuredBtn.addEventListener('click', () => {
-        p.injured = !p.injured;
-        persistRoster();
-        renderRosterList();
-        renderRosterQuickList();
-      });
-
-      const hiddenBtn = document.createElement('button');
-      hiddenBtn.type = 'button';
-      hiddenBtn.className = 'roster-flag-btn' + (p.hidden ? ' is-active-hidden' : '');
-      hiddenBtn.innerHTML = ICON_EYE;
-      hiddenBtn.title = p.hidden ? 'In der Taktik-Kaderliste wieder einblenden' : 'In der Taktik-Kaderliste ausblenden (z. B. am Spieltag nicht dabei)';
-      hiddenBtn.setAttribute('aria-label', `Ausgeblendet${p.hidden ? ' (markiert)' : ''}`);
-      hiddenBtn.addEventListener('click', () => {
-        p.hidden = !p.hidden;
-        persistRoster();
-        renderRosterList();
-        renderRosterQuickList();
-      });
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'icon-btn';
-      editBtn.innerHTML = ICON_EDIT;
-      editBtn.title = 'Bearbeiten';
-      editBtn.setAttribute('aria-label', 'Spieler:in bearbeiten');
-      editBtn.addEventListener('click', () => startEditRoster(p.id));
-
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'icon-btn icon-btn-danger';
-      delBtn.innerHTML = ICON_TRASH;
-      delBtn.title = 'Löschen';
-      delBtn.setAttribute('aria-label', 'Spieler:in löschen');
-      delBtn.addEventListener('click', async () => {
-        const confirmed = await confirmModal({
-          title: 'Spieler:in löschen?',
-          text: `„${p.firstName} ${p.lastName}“ wird endgültig aus dem Kader entfernt. Bereits auf dem Feld platzierte Spielericons bleiben davon unberührt — nur die Verknüpfung zum Kader geht verloren.`,
-          confirmLabel: 'Löschen',
-          cancelLabel: 'Abbrechen',
+      ROSTER_STATUS_BUTTON_DEFS.forEach((def) => {
+        const active = status === def.status;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'roster-flag-btn' + (active ? ' ' + def.activeClass : '');
+        if (def.text) btn.textContent = def.text; else btn.innerHTML = def.icon();
+        btn.title = def.title(active);
+        btn.setAttribute('aria-label', `${def.label}${active ? ' (markiert)' : ''}`);
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // nicht zusätzlich die Zeile als "bearbeiten" öffnen
+          if (def.status === 'start' && !active && roster.filter((r) => r.starting).length >= 11) {
+            rosterStartingLimitHint.classList.remove('hidden');
+            clearTimeout(btn._hintTimer);
+            btn._hintTimer = setTimeout(() => rosterStartingLimitHint.classList.add('hidden'), 3500);
+            return;
+          }
+          setRosterStatus(p, def.status);
+          persistRoster();
+          renderRosterList();
+          renderRosterQuickList();
         });
-        if (!confirmed) return;
-        deleteRosterEntry(p.id);
+        tdFlags.appendChild(btn);
       });
-      const btnDivider = document.createElement('span');
-      btnDivider.className = 'roster-btn-divider';
-      btnDivider.setAttribute('aria-hidden', 'true');
-      tdFlags.append(startBtn, injuredBtn, hiddenBtn, btnDivider, editBtn, delBtn);
 
-      tr.append(tdNum, tdFirst, tdLast, tdNick, tdInitials, tdPos, tdBirth, tdFlags);
+      tr.append(tdNum, tdFirst, tdLast, tdNick, tdInitials, tdPos1, tdPos2, tdBirth, tdFlags);
       rosterTableBody.appendChild(tr);
     });
   }
@@ -4068,6 +4166,19 @@
     clearRosterForm();
   });
   rosterCancelEditBtn.addEventListener('click', clearRosterForm);
+  rosterDeleteBtn.addEventListener('click', async () => {
+    if (!editingRosterId) return;
+    const p = roster.find((r) => r.id === editingRosterId);
+    if (!p) return;
+    const confirmed = await confirmModal({
+      title: 'Spieler:in löschen?',
+      text: `„${p.firstName} ${p.lastName}“ wird endgültig aus dem Kader entfernt. Bereits auf dem Feld platzierte Spielericons bleiben davon unberührt — nur die Verknüpfung zum Kader geht verloren.`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Abbrechen',
+    });
+    if (!confirmed) return;
+    deleteRosterEntry(p.id);
+  });
   // Enter in einem der Textfelder speichert, wie bei den Modal-Dialogen.
   [rosterFirstNameInput, rosterLastNameInput, rosterNicknameInput, rosterBirthdateInput, rosterNumberInput, rosterInitialsInput].forEach((input) => {
     input.addEventListener('keydown', (e) => {
@@ -6615,7 +6726,6 @@
      ============================================================ */
   const ICON_COPY = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
   const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
-  const ICON_EDIT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
   // Kreuz (Verletzt-Markierung, Kader-Tabelle) und Auge (Ausblenden-
   // Markierung) — siehe renderRosterList.
   // Bewusst als gefüllter, blockiger Kreuzpfad (statt zweier dünner Striche)
@@ -6626,6 +6736,9 @@
   // besser zur Funktion des Buttons (Spieler:in in der Taktik-Kaderliste
   // ausblenden).
   const ICON_EYE = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/></svg>';
+  // Parkbank von der Seite (Rückenlehne + Sitzfläche + zwei Beine) für den
+  // Status "Auswechselspieler:in" (auf der Bank).
+  const ICON_BENCH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v4"/><path d="M4 9h4"/><path d="M3 13h18"/><path d="M6 13v5"/><path d="M18 13v5"/></svg>';
   const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>';
   const ICON_FOLDER = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z"/></svg>';
   const ICON_FOLDER_PLUS = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z"/><path d="M12 11v5"/><path d="M9.5 13.5h5"/></svg>';
@@ -6645,6 +6758,7 @@
   undoBtn.innerHTML = ICON_UNDO;
   redoBtn.innerHTML = ICON_REDO;
   logoutBtn.innerHTML = ICON_DOOR_OPEN;
+  rosterDeleteBtn.innerHTML = ICON_TRASH;
   function setPlayIcon(isPlaying) {
     playBtn.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
     playBtn.title = isPlaying ? 'Pause' : 'Abspielen';
