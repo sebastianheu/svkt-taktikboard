@@ -3916,18 +3916,19 @@
       teamBNameInput.value = opponentNameTrimmed;
       setTeamName('b', opponentNameTrimmed);
 
-      // Team-A-Farbe nur anfassen, wenn kein Team-Link hinterlegt ist
-      // (siehe teamFussballdeImportBtn-Handler) -- der hat immer Prio 1
-      // als Farbquelle für Team A, eine einzelne Partie nur Prio 2.
-      let colorA = null;
-      if (!state.teamNames.aFussballDeTeamId && mine) {
-        colorA = await extractDominantColorFromDataUrl(mine.logoDataUrl);
-        if (colorA) setTeamColor('a', colorA);
-      }
-      const colorB = await extractDominantColorFromDataUrl(opponent.logoDataUrl);
+      // Feldspieler-Farbe für beide Teams aus den Logos DIESER Partie
+      // ziehen — auch für Team A, unabhängig davon, ob zusätzlich ein
+      // Team-Link hinterlegt ist (der zieht die Farbe nur beim eigenen
+      // Team-Link-Import selbst, siehe teamFussballdeImportBtn-Handler,
+      // aktualisiert sie aber nicht rückwirkend bei jedem Partie-Import).
+      const [colorA, colorB] = await Promise.all([
+        mine ? extractDominantColorFromDataUrl(mine.logoDataUrl) : Promise.resolve(null),
+        extractDominantColorFromDataUrl(opponent.logoDataUrl),
+      ]);
+      if (colorA) setTeamColor('a', colorA);
       if (colorB) setTeamColor('b', colorB);
 
-      const colorNote = !colorB ? ' (Farbe aus dem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
+      const colorNote = (!colorA || !colorB) ? ' (Farbe aus mind. einem Logo nicht ermittelbar — bitte bei Bedarf manuell nachjustieren.)' : '';
       showNextMatchStatus(`Übernommen: Team B = „${opponent.name}“.${colorNote}`, colorNote ? 'error' : 'info');
     } catch (e) {
       showNextMatchStatus('Die Partie konnte nicht geladen werden (Netzwerkfehler).', 'error');
