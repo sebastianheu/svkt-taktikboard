@@ -6881,15 +6881,22 @@
   let exporting = false;
   const EXPORT_PXPM = 9;
 
-  function downloadErrorMessage(err) {
-    const code = err && err.code;
-    switch (code) {
-      case 'declined': return 'Download abgelehnt.';
-      case 'rate_limited': return 'Bitte kurz warten und erneut versuchen.';
-      case 'too_large': return 'Datei zu groß zum Speichern.';
-      case 'bad_request': return 'Fehlgeschlagen (ungültige Daten).';
-      default: return 'Download in dieser Ansicht nicht verfügbar.';
-    }
+  // Löst einen echten Browser-Download aus (Blob-URL + verstecktes
+  // <a download>-Element). Ersetzt die frühere window.claude.use('downloads')-
+  // Capability: der Editor läuft mittlerweile als normale Next.js-Route
+  // (per iframe eingebettet), nicht mehr innerhalb eines Claude-Artifacts,
+  // wo diese API zur Verfügung stand — dort war sie schlicht nie vorhanden,
+  // weshalb der Download bisher immer mit "in dieser Ansicht nicht
+  // verfügbar" abbrach.
+  function saveBlobToDevice(filename, blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
   async function renderAndEncodeGif(opts) {
@@ -6974,21 +6981,11 @@
     return new Blob([arr], { type: mime });
   }
 
-  async function getDownloadsApi() {
-    return (window.claude && window.claude.use) ? await window.claude.use('downloads').catch(() => null) : null;
-  }
-
   exportBtn.addEventListener('click', async () => {
     const result = await renderAndEncodeGif();
     if (!result) return;
-    const downloads = await getDownloadsApi();
-    if (!downloads) { exportStatus.textContent = 'Download in dieser Ansicht nicht verfügbar.'; return; }
-    try {
-      await downloads.save({ filename: `${slugify(state.title)}.gif`, data: result.blob });
-      exportStatus.textContent = `GIF heruntergeladen (${(result.blob.size / 1024).toFixed(0)} KB, ${result.frameCount} Frames).`;
-    } catch (err) {
-      exportStatus.textContent = downloadErrorMessage(err);
-    }
+    saveBlobToDevice(`${slugify(state.title)}.gif`, result.blob);
+    exportStatus.textContent = `GIF heruntergeladen (${(result.blob.size / 1024).toFixed(0)} KB, ${result.frameCount} Frames).`;
   });
 
   /* ============================================================
@@ -7573,15 +7570,9 @@
         dlBtn.innerHTML = ICON_DOWNLOAD;
         dlBtn.title = 'GIF herunterladen';
         dlBtn.setAttribute('aria-label', 'GIF herunterladen');
-        dlBtn.addEventListener('click', async () => {
-          const downloads = await getDownloadsApi();
-          if (!downloads) { libraryStatus.textContent = 'Download in dieser Ansicht nicht verfügbar.'; return; }
-          try {
-            await downloads.save({ filename: `${slugify(entry.name)}.gif`, data: dataUrlToBlob(entry.gif.dataUrl) });
-            libraryStatus.textContent = 'GIF heruntergeladen.';
-          } catch (err) {
-            libraryStatus.textContent = downloadErrorMessage(err);
-          }
+        dlBtn.addEventListener('click', () => {
+          saveBlobToDevice(`${slugify(entry.name)}.gif`, dataUrlToBlob(entry.gif.dataUrl));
+          libraryStatus.textContent = 'GIF heruntergeladen.';
         });
         actions.appendChild(dlBtn);
       }
