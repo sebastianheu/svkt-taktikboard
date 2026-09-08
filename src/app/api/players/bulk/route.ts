@@ -16,7 +16,32 @@ type IncomingPlayer = {
   starting?: boolean;
   injured?: boolean;
   hidden?: boolean;
+  headingStrength?: number | string | null;
+  duelStrength?: number | string | null;
+  anticipationPositioning?: number | string | null;
+  speed?: number | string | null;
+  techniquePrecision?: number | string | null;
+  heightCm?: number | string | null;
 };
+
+// Standard-Attribute: 1-10-Skala (Kopfballstärke/Zweikampf-Robustheit/
+// Antizipation & Stellungsspiel/Schnelligkeit/Technik & Präzision), leer
+// bleibt NULL statt eines geratenen Werts -- siehe Pflichtfeld-Logik im
+// Editor, die neue Einträge ohne ausgefüllte Attribute gar nicht erst
+// hierher schickt, waehrend Bestandsdaten weiterhin ohne Attribute
+// gespeichert werden koennen.
+function normalizeAttribute(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseInt(String(value), 10);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(1, Math.min(10, n));
+}
+function normalizeHeightCm(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseInt(String(value), 10);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(100, Math.min(230, n));
+}
 
 // Ersetzt den kompletten Kader in einem Rutsch. Das spiegelt genau, wie der
 // alte Taktiktafel-Editor sein internes `roster`-Array bisher komplett in
@@ -66,6 +91,12 @@ export async function PUT(request: NextRequest) {
         starting: !!p.starting,
         injured: !!p.injured,
         hidden: !!p.hidden,
+        headingStrength: normalizeAttribute(p.headingStrength),
+        duelStrength: normalizeAttribute(p.duelStrength),
+        anticipationPositioning: normalizeAttribute(p.anticipationPositioning),
+        speed: normalizeAttribute(p.speed),
+        techniquePrecision: normalizeAttribute(p.techniquePrecision),
+        heightCm: normalizeHeightCm(p.heightCm),
       };
     })
     .filter((p) => p.firstName && p.lastName);
@@ -79,8 +110,16 @@ export async function PUT(request: NextRequest) {
     ...toDelete.map((id) => sql`DELETE FROM players WHERE id = ${id}`),
     ...normalized.map(
       (p) => sql`
-        INSERT INTO players (id, first_name, last_name, nickname, position1, position2, birthdate, number, initials, starting, injured, hidden, updated_at)
-        VALUES (${p.id}, ${p.firstName}, ${p.lastName}, ${p.nickname}, ${p.position1}, ${p.position2}, ${p.birthdate}, ${p.number}, ${p.initials}, ${p.starting}, ${p.injured}, ${p.hidden}, now())
+        INSERT INTO players (
+          id, first_name, last_name, nickname, position1, position2, birthdate, number, initials,
+          starting, injured, hidden, heading_strength, duel_strength, anticipation_positioning,
+          speed, technique_precision, height_cm, updated_at
+        )
+        VALUES (
+          ${p.id}, ${p.firstName}, ${p.lastName}, ${p.nickname}, ${p.position1}, ${p.position2}, ${p.birthdate}, ${p.number}, ${p.initials},
+          ${p.starting}, ${p.injured}, ${p.hidden}, ${p.headingStrength}, ${p.duelStrength}, ${p.anticipationPositioning},
+          ${p.speed}, ${p.techniquePrecision}, ${p.heightCm}, now()
+        )
         ON CONFLICT (id) DO UPDATE SET
           first_name = EXCLUDED.first_name,
           last_name = EXCLUDED.last_name,
@@ -93,6 +132,12 @@ export async function PUT(request: NextRequest) {
           starting = EXCLUDED.starting,
           injured = EXCLUDED.injured,
           hidden = EXCLUDED.hidden,
+          heading_strength = EXCLUDED.heading_strength,
+          duel_strength = EXCLUDED.duel_strength,
+          anticipation_positioning = EXCLUDED.anticipation_positioning,
+          speed = EXCLUDED.speed,
+          technique_precision = EXCLUDED.technique_precision,
+          height_cm = EXCLUDED.height_cm,
           updated_at = now()
       `
     ),

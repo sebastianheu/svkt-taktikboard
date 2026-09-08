@@ -24,7 +24,9 @@ export async function GET() {
   const sql = await getDb();
   const rows = await sql`
     SELECT id, first_name, last_name, nickname, position1, position2,
-           birthdate, number, initials, starting, injured, hidden
+           birthdate, number, initials, starting, injured, hidden,
+           heading_strength, duel_strength, anticipation_positioning,
+           speed, technique_precision, height_cm
     FROM players
     ORDER BY number NULLS LAST, last_name ASC
   `;

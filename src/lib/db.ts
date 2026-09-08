@@ -40,9 +40,29 @@ async function ensureSchema(sql: ReturnType<typeof getSql>) {
       starting BOOLEAN NOT NULL DEFAULT FALSE,
       injured BOOLEAN NOT NULL DEFAULT FALSE,
       hidden BOOLEAN NOT NULL DEFAULT FALSE,
+      heading_strength INTEGER,
+      duel_strength INTEGER,
+      anticipation_positioning INTEGER,
+      speed INTEGER,
+      technique_precision INTEGER,
+      height_cm INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `;
+  // Standard-Attribute (Kopfballstärke/Zweikampf-Robustheit/Antizipation &
+  // Stellungsspiel/Schnelligkeit/Technik & Präzision je 1-10, Körpergröße in
+  // cm) nachtraeglich ergaenzt -- ADD COLUMN IF NOT EXISTS greift auch bei
+  // einer bereits bestehenden Tabelle aus einem frueheren Deploy, das
+  // CREATE TABLE IF NOT EXISTS oben allein wuerde dort nichts mehr aendern.
+  await sql`
+    ALTER TABLE players
+      ADD COLUMN IF NOT EXISTS heading_strength INTEGER,
+      ADD COLUMN IF NOT EXISTS duel_strength INTEGER,
+      ADD COLUMN IF NOT EXISTS anticipation_positioning INTEGER,
+      ADD COLUMN IF NOT EXISTS speed INTEGER,
+      ADD COLUMN IF NOT EXISTS technique_precision INTEGER,
+      ADD COLUMN IF NOT EXISTS height_cm INTEGER
   `;
   // Bibliothek (gespeicherte Taktiken/Situationen inkl. optionalem GIF) und
   // Ordner aus dem bisherigen Taktiktafel-Editor: dort war das jeweils ein

@@ -1844,6 +1844,7 @@
         </div>
         <div id="rosterFormError" class="hint hidden" style="color:var(--danger);"></div>
         <div class="roster-form-actions" style="margin-top:12px;">
+          <button type="button" class="btn btn-ghost" id="rosterAttributesBtn">Attribute</button>
           <button type="button" class="btn btn-accent" id="rosterSaveBtn">Hinzufügen</button>
           <button type="button" class="btn btn-ghost hidden" id="rosterCancelEditBtn">Abbrechen</button>
           <button type="button" class="icon-btn icon-btn-danger hidden" id="rosterDeleteBtn" style="margin-left:auto;" title="Spieler:in löschen" aria-label="Spieler:in löschen"></button>
@@ -1861,7 +1862,10 @@
       <section class="panel" id="rosterListPanel">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px;">
           <h2 class="panel-title" style="margin-bottom:0;">Kaderliste (<span id="rosterCount">0</span>)</h2>
-          <button id="rosterDeleteAllBtn" type="button" class="btn btn-ghost btn-sm" title="Alle Spieler:innen aus der Kaderliste entfernen">Alle löschen</button>
+          <div style="display:flex; gap:8px;">
+            <button id="rosterExportCsvBtn" type="button" class="btn btn-ghost btn-sm" title="Kaderliste inkl. Standard-Attribute als CSV-Datei herunterladen">CSV exportieren</button>
+            <button id="rosterDeleteAllBtn" type="button" class="btn btn-ghost btn-sm" title="Alle Spieler:innen aus der Kaderliste entfernen">Alle löschen</button>
+          </div>
         </div>
         <div id="rosterLoadError" class="hint hidden" style="color:var(--danger); margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <span>Kaderliste konnte nicht vom Server geladen werden. Damit dabei nichts überschrieben wird, sind Änderungen an der Kaderliste vorübergehend gesperrt.</span>
@@ -3378,10 +3382,12 @@
   const rosterNumberInput = document.getElementById('rosterNumberInput');
   const rosterInitialsInput = document.getElementById('rosterInitialsInput');
   const rosterFormError = document.getElementById('rosterFormError');
+  const rosterAttributesBtn = document.getElementById('rosterAttributesBtn');
   const rosterSaveBtn = document.getElementById('rosterSaveBtn');
   const rosterCancelEditBtn = document.getElementById('rosterCancelEditBtn');
   const rosterDeleteBtn = document.getElementById('rosterDeleteBtn');
   const rosterCount = document.getElementById('rosterCount');
+  const rosterExportCsvBtn = document.getElementById('rosterExportCsvBtn');
   const rosterDeleteAllBtn = document.getElementById('rosterDeleteAllBtn');
   const rosterLoadError = document.getElementById('rosterLoadError');
   const rosterLoadRetryBtn = document.getElementById('rosterLoadRetryBtn');
@@ -3613,6 +3619,103 @@
   }
 
   /* ============================================================
+     Standard-Attribute (Kaderformular) — 6 Bewertungen je Spieler:in,
+     Skala 1 (sehr schlecht) bis 10 (sehr gut), Körpergröße als Ausnahme
+     objektiv in cm. Datengrundlage für eine spätere automatische
+     Zuteilung "beste Startelf für Standard X" (noch nicht umgesetzt).
+     ============================================================ */
+
+  const ATTRIBUTE_DEFS = [
+    { key: 'headingStrength', label: 'Kopfballstärke', kind: 'scale' },
+    { key: 'duelStrength', label: 'Zweikampf-/Robustheit', kind: 'scale' },
+    { key: 'anticipationPositioning', label: 'Antizipation & Stellungsspiel', kind: 'scale' },
+    { key: 'speed', label: 'Schnelligkeit', kind: 'scale' },
+    { key: 'techniquePrecision', label: 'Technik & Präzision am Ball', kind: 'scale' },
+    { key: 'heightCm', label: 'Körpergröße (cm)', kind: 'height' },
+  ];
+
+  // Rollen der Eckball-Varianten (London/Block/Traube/Zug/Kurze Ecke
+  // offensiv, Ecke defensiv) und ihre wichtigsten Attribute — reine
+  // Datengrundlage für eine spätere automatische Zuteilung, aktuell noch
+  // ungenutzt (siehe Abstimmung mit dem Trainer).
+  const STANDARD_ROLE_ATTRIBUTE_WEIGHTS = {
+    schuetzin: ['techniquePrecision'],
+    traube: ['headingStrength', 'duelStrength'],
+    elfer: ['headingStrength', 'techniquePrecision'],
+    kurzerPfosten: ['headingStrength', 'speed'],
+    fuenfer: ['anticipationPositioning', 'speed'],
+    blocker: ['heightCm', 'duelStrength'],
+    rueckraum: ['anticipationPositioning', 'speed'],
+    kontersicherung: ['anticipationPositioning', 'speed'],
+    kopfball: ['headingStrength', 'heightCm'],
+    vorne: ['speed', 'anticipationPositioning'],
+  };
+
+  // Zeigt das Attribute-Modal vorbefüllt mit `initial` (z. B. draftAttributes
+  // oder {} bei einer neuen Spieler:in) und löst mit dem eingegebenen
+  // Objekt auf, oder mit null bei "Abbrechen" (dann bleibt draftAttributes
+  // im Aufrufer unverändert).
+  function openAttributesModal(initial) {
+    return new Promise((resolve) => {
+      modalBox.innerHTML = '';
+      modalBox.classList.add('modal-box-wide');
+      const h = document.createElement('div'); h.className = 'modal-title'; h.textContent = 'Standard-Attribute';
+      const p = document.createElement('div'); p.className = 'modal-text'; p.textContent = 'Bewertung 1 (sehr schlecht) bis 10 (sehr gut). Körpergröße als Messwert in cm.';
+      modalBox.append(h, p);
+
+      const inputs = {};
+      ATTRIBUTE_DEFS.forEach((def) => {
+        const field = document.createElement('label');
+        field.className = 'field';
+        field.style.marginBottom = '10px';
+        const span = document.createElement('span');
+        const input = document.createElement('input');
+        if (def.kind === 'scale') {
+          const valueTag = document.createElement('span');
+          valueTag.className = 'mono';
+          valueTag.textContent = initial[def.key] != null ? String(initial[def.key]) : '5';
+          span.append(`${def.label}: `, valueTag);
+          input.type = 'range'; input.min = '1'; input.max = '10'; input.step = '1';
+          input.value = initial[def.key] != null ? String(initial[def.key]) : '5';
+          input.addEventListener('input', () => {
+            valueTag.textContent = input.value;
+            updateRangeFill(input);
+          });
+        } else {
+          span.textContent = def.label;
+          input.type = 'number'; input.min = '100'; input.max = '230'; input.placeholder = 'z. B. 170';
+          if (initial[def.key] != null) input.value = String(initial[def.key]);
+        }
+        field.append(span, input);
+        modalBox.appendChild(field);
+        inputs[def.key] = input;
+        if (def.kind === 'scale') updateRangeFill(input);
+      });
+
+      const actions = document.createElement('div'); actions.className = 'modal-actions';
+      const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Abbrechen';
+      const okBtn = document.createElement('button'); okBtn.type = 'button'; okBtn.className = 'btn btn-accent'; okBtn.textContent = 'Übernehmen';
+      actions.append(cancelBtn, okBtn);
+      modalBox.appendChild(actions);
+      modalOverlay.classList.remove('hidden');
+
+      function finish(value) {
+        closeModal();
+        resolve(value);
+      }
+      okBtn.addEventListener('click', () => {
+        const result = {};
+        ATTRIBUTE_DEFS.forEach((def) => {
+          const raw = inputs[def.key].value;
+          result[def.key] = raw === '' ? null : parseInt(raw, 10);
+        });
+        finish(result);
+      });
+      cancelBtn.addEventListener('click', () => finish(null));
+    });
+  }
+
+  /* ============================================================
      Team colors
      ============================================================ */
 
@@ -3738,6 +3841,19 @@
     teamFussballdeImportStatus.style.color = tone === 'error' ? 'var(--danger)' : 'var(--text-dim)';
     teamFussballdeImportStatus.classList.toggle('hidden', !message);
   }
+
+  // Merkt sich nur den eingetragenen Link-Text, damit er nach einem
+  // Redeploy nicht jedes Mal neu eingegeben werden muss -- der eigentliche
+  // Abruf (Name/Farbe von fussball.de holen) bleibt bewusst ein manueller
+  // Klick auf "Übernehmen", kein automatischer Abruf bei jedem Laden.
+  const TEAM_FUSSBALLDE_URL_KEY = 'spielzugregie.teamfussballdeurl.v1';
+  try {
+    const savedTeamUrl = localStorage.getItem(TEAM_FUSSBALLDE_URL_KEY);
+    if (savedTeamUrl) teamFussballdeUrlInput.value = savedTeamUrl;
+  } catch (e) { /* ignore */ }
+  teamFussballdeUrlInput.addEventListener('input', () => {
+    try { localStorage.setItem(TEAM_FUSSBALLDE_URL_KEY, teamFussballdeUrlInput.value.trim()); } catch (e) { /* ignore */ }
+  });
   teamFussballdeImportBtn.addEventListener('click', async () => {
     const url = teamFussballdeUrlInput.value.trim();
     if (!url) { showTeamFussballdeStatus('Bitte zuerst einen Fußball.de-Link einfügen.', 'error'); return; }
@@ -3756,13 +3872,9 @@
       }
       const nameTrimmed = json.name.slice(0, 24);
       setTeamName('a', nameTrimmed);
-      // Merkt sich, dass ein Team-Link hinterlegt ist -- das ist die
-      // "Prio 1"-Farbquelle für Team A: ein späterer Partie-Import
-      // ("Nächste Spielpaarung") lässt Team As Farbe dann unangetastet
-      // statt sie aus der Partie neu zu ziehen (siehe dortiger Handler).
-      // Die ID selbst ist noch nicht aktiv genutzt, soll aber später auch
-      // die Gegner-Erkennung zuverlässiger machen als der lockere
-      // Namensvergleich.
+      // Die ID selbst ist noch nicht aktiv genutzt, soll aber später die
+      // Gegner-Erkennung beim Partie-Import zuverlässiger machen als der
+      // aktuell lockere Namensvergleich (siehe namesLooselyMatch).
       state.teamNames.aFussballDeTeamId = json.teamId || null;
       persistTeamNames();
 
@@ -3967,6 +4079,12 @@
       starting: !!row.starting,
       injured: !!row.injured,
       hidden: !!row.hidden,
+      headingStrength: row.heading_strength == null ? null : row.heading_strength,
+      duelStrength: row.duel_strength == null ? null : row.duel_strength,
+      anticipationPositioning: row.anticipation_positioning == null ? null : row.anticipation_positioning,
+      speed: row.speed == null ? null : row.speed,
+      techniquePrecision: row.technique_precision == null ? null : row.technique_precision,
+      heightCm: row.height_cm == null ? null : row.height_cm,
     };
   }
   async function loadRosterFromServer() {
@@ -4066,6 +4184,16 @@
   // elsewhere: transient UI state kept as a plain closure variable
   // rather than on `state`, since it never needs to survive a reload.
   let editingRosterId = null;
+  // Zwischenspeicher für die 6 Standard-Attribute des Formulars, gefüllt
+  // über das Attribute-Modal (siehe rosterAttributesBtn) -- erst beim
+  // Hinzufügen/Speichern zusammen mit den übrigen Formularfeldern in den
+  // eigentlichen Kadereintrag übernommen. attributesConfirmed erzwingt nur
+  // beim NEUEN Anlegen ein einmaliges Öffnen+Bestätigen des Modals
+  // (siehe rosterSaveBtn); beim Bearbeiten eines Bestandseintrags ist es
+  // von Anfang an true, damit Alteinträge ohne Attribute weiter speicherbar
+  // bleiben.
+  let draftAttributes = null;
+  let attributesConfirmed = false;
   // While adding a NEW entry, the "Kürzel" field is auto-suggested live
   // from Vor-/Nachname (see maybeAutofillInitials) — until the person
   // types into it themselves, or an existing entry is opened for
@@ -4163,6 +4291,8 @@
     rosterNumberInput.value = '';
     rosterInitialsInput.value = '';
     initialsManuallyEdited = false;
+    draftAttributes = null;
+    attributesConfirmed = false;
     rosterFormError.classList.add('hidden');
     editingRosterId = null;
     rosterFormTitle.textContent = 'Spieler:in hinzufügen';
@@ -4193,6 +4323,15 @@
     rosterNumberInput.value = p.number == null ? '' : p.number;
     rosterInitialsInput.value = p.initials || defaultInitials(p.firstName, p.lastName);
     initialsManuallyEdited = true; // beim Bearbeiten nie automatisch überschreiben
+    draftAttributes = {
+      headingStrength: p.headingStrength != null ? p.headingStrength : null,
+      duelStrength: p.duelStrength != null ? p.duelStrength : null,
+      anticipationPositioning: p.anticipationPositioning != null ? p.anticipationPositioning : null,
+      speed: p.speed != null ? p.speed : null,
+      techniquePrecision: p.techniquePrecision != null ? p.techniquePrecision : null,
+      heightCm: p.heightCm != null ? p.heightCm : null,
+    };
+    attributesConfirmed = true; // Bestandseintrag: Attribute-Pflicht gilt nur fürs Neuanlegen
     rosterFormError.classList.add('hidden');
     rosterFormTitle.textContent = 'Spieler:in bearbeiten';
     rosterSaveBtn.textContent = 'Speichern';
@@ -4217,6 +4356,48 @@
     renderRosterQuickList();
     clearRosterForm();
   }
+
+  // Feldwert für CSV escapen: Anführungszeichen verdoppeln und in
+  // Anführungszeichen setzen, sobald Komma/Anführungszeichen/Zeilenumbruch
+  // enthalten sind (RFC 4180) — sonst unquoted lassen, das bleibt lesbarer
+  // beim Öffnen in einem einfachen Texteditor.
+  function csvEscape(value) {
+    const s = value == null ? '' : String(value);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  rosterExportCsvBtn.addEventListener('click', () => {
+    if (roster.length === 0) return;
+    const headers = [
+      'Nr.', 'Vorname', 'Nachname', 'Spitzname', 'Kürzel', 'Position 1', 'Position 2',
+      'Geburtsdatum', 'Status', 'Kopfballstärke', 'Zweikampf-/Robustheit',
+      'Antizipation & Stellungsspiel', 'Schnelligkeit', 'Technik & Präzision am Ball',
+      'Körpergröße (cm)',
+    ];
+    const statusLabels = { start: 'Startelf', bench: 'Auswechselspieler:in', hidden: 'Ausgeblendet', injured: 'Verletzt' };
+    const rows = rosterSortedForTable().map((p) => [
+      p.number == null ? '' : p.number,
+      p.firstName || '',
+      p.lastName || '',
+      p.nickname || '',
+      p.initials || '',
+      p.position1 || '',
+      p.position2 || '',
+      toDateOnlyString(p.birthdate),
+      statusLabels[rosterStatusOf(p)],
+      p.headingStrength != null ? p.headingStrength : '',
+      p.duelStrength != null ? p.duelStrength : '',
+      p.anticipationPositioning != null ? p.anticipationPositioning : '',
+      p.speed != null ? p.speed : '',
+      p.techniquePrecision != null ? p.techniquePrecision : '',
+      p.heightCm != null ? p.heightCm : '',
+    ]);
+    // ﻿ (UTF-8 BOM) voran, damit Excel die Umlaute auch ohne
+    // manuelle Kodierungswahl beim Öffnen korrekt darstellt.
+    const csv = '﻿' + [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    saveBlobToDevice(`${slugify(state.teamNames.a || 'kaderliste')}-kaderliste.csv`, blob);
+  });
 
   rosterDeleteAllBtn.addEventListener('click', async () => {
     if (roster.length === 0) return;
@@ -4445,6 +4626,14 @@
     });
   }
 
+  rosterAttributesBtn.addEventListener('click', async () => {
+    const result = await openAttributesModal(draftAttributes || {});
+    if (result) {
+      draftAttributes = result;
+      attributesConfirmed = true;
+      rosterFormError.classList.add('hidden');
+    }
+  });
   rosterSaveBtn.addEventListener('click', () => {
     const firstName = rosterFirstNameInput.value.trim();
     const lastName = rosterLastNameInput.value.trim();
@@ -4453,9 +4642,19 @@
       rosterFormError.classList.remove('hidden');
       return;
     }
+    // Standard-Attribute sind nur beim NEUEN Anlegen Pflicht (siehe
+    // rosterAttributesBtn-Handler, setzt attributesConfirmed) -- bestehende
+    // Eintraege lassen sich weiterhin auch ohne ausgefuellte Attribute
+    // speichern.
+    if (!editingRosterId && !attributesConfirmed) {
+      rosterFormError.textContent = 'Bitte zuerst über den Button "Attribute" die Standard-Attribute ausfüllen.';
+      rosterFormError.classList.remove('hidden');
+      return;
+    }
     const birthdateVal = rosterBirthdateInput.value; // native date input: '' or 'YYYY-MM-DD'
     const numberVal = rosterNumberInput.value.trim();
     const initialsVal = rosterInitialsInput.value.trim().toUpperCase().slice(0, 4) || defaultInitials(firstName, lastName);
+    const attrs = draftAttributes || {};
     const data = {
       firstName,
       lastName,
@@ -4465,6 +4664,12 @@
       birthdate: birthdateVal || null,
       number: numberVal ? clamp(parseInt(numberVal, 10), 0, 99) : null,
       initials: initialsVal,
+      headingStrength: attrs.headingStrength != null ? attrs.headingStrength : null,
+      duelStrength: attrs.duelStrength != null ? attrs.duelStrength : null,
+      anticipationPositioning: attrs.anticipationPositioning != null ? attrs.anticipationPositioning : null,
+      speed: attrs.speed != null ? attrs.speed : null,
+      techniquePrecision: attrs.techniquePrecision != null ? attrs.techniquePrecision : null,
+      heightCm: attrs.heightCm != null ? attrs.heightCm : null,
     };
     if (editingRosterId) {
       const p = roster.find((r) => r.id === editingRosterId);
