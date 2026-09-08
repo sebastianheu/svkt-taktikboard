@@ -59,6 +59,17 @@ export function checkPasscode(input: string): boolean {
   return timingSafeEqual(input, expected);
 }
 
+// Separater API-Key fuer externe, nicht-interaktive Zugriffe (z. B. eine
+// Gegner-Vorbereitungs-Integration), die kein Session-Cookie besitzen
+// koennen -- bewusst ein eigener Wert statt AUTH_PASSCODE wiederzuverwenden,
+// damit sich der externe Zugriff unabhaengig vom persoenlichen Login-Code
+// widerrufen/rotieren laesst.
+export function checkExternalApiKey(input: string): boolean {
+  const expected = process.env.EXTERNAL_API_KEY;
+  if (!expected) return false;
+  return timingSafeEqual(input, expected);
+}
+
 // Vergleicht zwei Strings ohne fruehen Abbruch (schuetzt gegen simple
 // Timing-Angriffe auf den Zugangscode).
 function timingSafeEqual(a: string, b: string): boolean {

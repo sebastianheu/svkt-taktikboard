@@ -21,6 +21,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Greift auf alles zu ausser: /login selbst, Next.js-interne Pfade,
-  // und statische Dateien mit einer Dateiendung (Icons, etc.).
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  // statische Dateien mit einer Dateiendung (Icons, etc.), und
+  // /api/external/* -- diese Routen sind fuer nicht-interaktive externe
+  // Zugriffe (kein Browser, kein Session-Cookie) gedacht und pruefen
+  // stattdessen selbst einen API-Key (siehe checkExternalApiKey in
+  // lib/auth.ts). Ein Redirect zu /login waere dort ohnehin falsch --
+  // eine externe Anwendung braucht eine klare 401-JSON-Antwort.
+  matcher: ["/((?!login|api/external|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
