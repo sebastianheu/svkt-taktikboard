@@ -26,7 +26,8 @@ export async function GET() {
     SELECT id, first_name, last_name, nickname, position1, position2,
            birthdate, number, initials, starting, injured, hidden,
            heading_strength, duel_strength, anticipation_positioning,
-           speed, technique_precision, height_cm
+           speed, technique_precision, height_cm,
+           finishing, crossing, long_shots, strength
     FROM players
     ORDER BY number NULLS LAST, last_name ASC
   `;

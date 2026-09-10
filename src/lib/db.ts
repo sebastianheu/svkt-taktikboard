@@ -46,15 +46,20 @@ async function ensureSchema(sql: ReturnType<typeof getSql>) {
       speed INTEGER,
       technique_precision INTEGER,
       height_cm INTEGER,
+      finishing INTEGER,
+      crossing INTEGER,
+      long_shots INTEGER,
+      strength INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
-  // Standard-Attribute (Kopfballstärke/Zweikampf-Robustheit/Antizipation &
-  // Stellungsspiel/Schnelligkeit/Technik & Präzision je 1-10, Körpergröße in
-  // cm) nachtraeglich ergaenzt -- ADD COLUMN IF NOT EXISTS greift auch bei
-  // einer bereits bestehenden Tabelle aus einem frueheren Deploy, das
-  // CREATE TABLE IF NOT EXISTS oben allein wuerde dort nichts mehr aendern.
+  // Standard-Attribute (10 Faehigkeiten fuer die Standard-Rollenzuteilung:
+  // Abschluss/Kopfball/Flanken/Distanzschuesse/Staerke/Schnelligkeit/
+  // Zweikampf/Technik/Spielintelligenz je 1-10, Groesse in cm) nachtraeglich
+  // ergaenzt -- ADD COLUMN IF NOT EXISTS greift auch bei einer bereits
+  // bestehenden Tabelle aus einem frueheren Deploy, das CREATE TABLE IF NOT
+  // EXISTS oben allein wuerde dort nichts mehr aendern.
   await sql`
     ALTER TABLE players
       ADD COLUMN IF NOT EXISTS heading_strength INTEGER,
@@ -62,7 +67,11 @@ async function ensureSchema(sql: ReturnType<typeof getSql>) {
       ADD COLUMN IF NOT EXISTS anticipation_positioning INTEGER,
       ADD COLUMN IF NOT EXISTS speed INTEGER,
       ADD COLUMN IF NOT EXISTS technique_precision INTEGER,
-      ADD COLUMN IF NOT EXISTS height_cm INTEGER
+      ADD COLUMN IF NOT EXISTS height_cm INTEGER,
+      ADD COLUMN IF NOT EXISTS finishing INTEGER,
+      ADD COLUMN IF NOT EXISTS crossing INTEGER,
+      ADD COLUMN IF NOT EXISTS long_shots INTEGER,
+      ADD COLUMN IF NOT EXISTS strength INTEGER
   `;
   // Bibliothek (gespeicherte Taktiken/Situationen inkl. optionalem GIF) und
   // Ordner aus dem bisherigen Taktiktafel-Editor: dort war das jeweils ein
@@ -83,6 +92,21 @@ async function ensureSchema(sql: ReturnType<typeof getSql>) {
     CREATE TABLE IF NOT EXISTS library_folders (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  // Partien ("Matches"): eigener, schlanker Bereich fuer partie-spezifische
+  // Taktiken. Eine Taktik referenziert optional eine Partie ueber
+  // matchId innerhalb ihres JSONB-Blobs in library_entries (kein eigenes
+  // FK-Constraint noetig -- gleiches lose Kopplungsmuster wie rosterId auf
+  // Spieler-Elementen).
+  await sql`
+    CREATE TABLE IF NOT EXISTS matches (
+      id TEXT PRIMARY KEY,
+      opponent_name TEXT NOT NULL,
+      match_date DATE,
+      note TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )

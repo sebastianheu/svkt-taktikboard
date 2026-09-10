@@ -22,6 +22,10 @@ type IncomingPlayer = {
   speed?: number | string | null;
   techniquePrecision?: number | string | null;
   heightCm?: number | string | null;
+  finishing?: number | string | null;
+  crossing?: number | string | null;
+  longShots?: number | string | null;
+  strength?: number | string | null;
 };
 
 // Standard-Attribute: 1-10-Skala (Kopfballstärke/Zweikampf-Robustheit/
@@ -97,6 +101,10 @@ export async function PUT(request: NextRequest) {
         speed: normalizeAttribute(p.speed),
         techniquePrecision: normalizeAttribute(p.techniquePrecision),
         heightCm: normalizeHeightCm(p.heightCm),
+        finishing: normalizeAttribute(p.finishing),
+        crossing: normalizeAttribute(p.crossing),
+        longShots: normalizeAttribute(p.longShots),
+        strength: normalizeAttribute(p.strength),
       };
     })
     .filter((p) => p.firstName && p.lastName);
@@ -113,12 +121,12 @@ export async function PUT(request: NextRequest) {
         INSERT INTO players (
           id, first_name, last_name, nickname, position1, position2, birthdate, number, initials,
           starting, injured, hidden, heading_strength, duel_strength, anticipation_positioning,
-          speed, technique_precision, height_cm, updated_at
+          speed, technique_precision, height_cm, finishing, crossing, long_shots, strength, updated_at
         )
         VALUES (
           ${p.id}, ${p.firstName}, ${p.lastName}, ${p.nickname}, ${p.position1}, ${p.position2}, ${p.birthdate}, ${p.number}, ${p.initials},
           ${p.starting}, ${p.injured}, ${p.hidden}, ${p.headingStrength}, ${p.duelStrength}, ${p.anticipationPositioning},
-          ${p.speed}, ${p.techniquePrecision}, ${p.heightCm}, now()
+          ${p.speed}, ${p.techniquePrecision}, ${p.heightCm}, ${p.finishing}, ${p.crossing}, ${p.longShots}, ${p.strength}, now()
         )
         ON CONFLICT (id) DO UPDATE SET
           first_name = EXCLUDED.first_name,
@@ -138,6 +146,10 @@ export async function PUT(request: NextRequest) {
           speed = EXCLUDED.speed,
           technique_precision = EXCLUDED.technique_precision,
           height_cm = EXCLUDED.height_cm,
+          finishing = EXCLUDED.finishing,
+          crossing = EXCLUDED.crossing,
+          long_shots = EXCLUDED.long_shots,
+          strength = EXCLUDED.strength,
           updated_at = now()
       `
     ),

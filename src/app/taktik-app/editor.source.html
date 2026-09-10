@@ -806,6 +806,55 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .lib-badge {
+    display: inline-block;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .match-scope-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+  }
+  .match-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .match-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    padding: 10px 12px;
+  }
+  .match-meta { min-width: 0; flex: 1; }
+  .match-name {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .match-name.lib-clickable:hover { color: var(--accent-strong); text-decoration: underline; }
 
   .frame-actions {
     display: flex;
@@ -1279,6 +1328,7 @@
     <nav class="view-tabs" id="viewTabs">
       <button type="button" class="view-tab active" data-view="taktik">Taktik</button>
       <button type="button" class="view-tab" data-view="team">Team</button>
+      <button type="button" class="view-tab" data-view="matches">Partien</button>
     </nav>
     <div class="topbar-controls">
       <div class="history-controls">
@@ -1528,6 +1578,10 @@
             </label>
           </div>
           <div id="playerControls" class="hidden">
+            <div class="field hidden" id="playerRoleField" title="Nur im Vorlagen-Modus: weist diesem Icon statt einer festen Kaderspieler:in eine Standard-Rolle zu. Beim späteren 'Vorlage anwenden' wird die Rolle mit einer echten Spieler:in besetzt.">
+              <span>Standard-Rolle</span>
+              <select id="playerRoleSelect"></select>
+            </div>
             <div class="field">
               <span>Füllfarbe</span>
               <div class="color-field-wrap" id="playerFillWrap">
@@ -1728,6 +1782,7 @@
             <label class="toggle" title="Zeigt senkrechte Linien für die Spielfeldspuren (Flügel/Halbraum/Zentrum/Halbraum/Flügel) an, abgeleitet aus den Maßen von Torraum und Strafraum. Zusammen mit „Zonen“ ergibt sich das volle Raster."><input type="checkbox" id="tracksToggle"> Spuren</label>
             <label class="toggle" title="Zeigt waagerechte Linien zur Dritteleinteilung des Spielfelds an, abgeleitet aus den Maßen des Strafraums. Zusammen mit „Spuren“ ergibt sich das volle Raster."><input type="checkbox" id="zonesToggle"> Zonen</label>
           </div>
+          <label class="toggle" title="Spieler-Elemente bekommen im Inspector statt einer festen Kaderspieler:in eine Standard-Rolle zugewiesen (z. B. Blocker, Kopfball). Beim späteren 'Vorlage anwenden' werden die Rollen automatisch oder manuell mit echten Spieler:innen besetzt."><input type="checkbox" id="templateToggle"> Als Vorlage speichern</label>
           <div class="layers-toggle-wrap">
             <button type="button" class="layers-toggle-btn" id="layersToggleBtn" aria-expanded="false">
               <span>Ebenen</span>
@@ -1757,6 +1812,7 @@
     <aside class="rail rail-right">
       <section class="panel" id="libraryPanel">
         <h2 class="panel-title">Taktiken</h2>
+        <div id="matchScopeBanner" class="match-scope-banner hidden"></div>
         <div id="libraryStatus" class="hint" style="margin:0 0 8px;"></div>
         <div class="folder-menu" id="folderMenu"></div>
         <div id="libraryList" class="lib-list"></div>
@@ -1892,6 +1948,40 @@
         </div>
         <div id="rosterStartingLimitHint" class="hint hidden" style="color:var(--warn-strong); margin-top:8px;">Es können höchstens 11 Spieler:innen gleichzeitig als Startelf markiert werden.</div>
         <div class="hint" style="margin-top:10px;">Wird automatisch gespeichert und ist auf all deinen Geräten verfügbar. Auf eine Spaltenüberschrift klicken sortiert danach, auf eine Zeile klicken lädt die Daten oben zum Bearbeiten.</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="team-view hidden" id="matchesView">
+    <div class="team-view-inner">
+      <section class="panel" id="matchFormPanel">
+        <h2 class="panel-title" id="matchFormTitle">Partie anlegen</h2>
+        <div class="roster-form-grid">
+          <label class="field">
+            <span>Gegner</span>
+            <input type="text" id="matchOpponentInput" maxlength="60" placeholder="z. B. TSV Beispielstadt">
+          </label>
+          <label class="field">
+            <span>Datum</span>
+            <input type="date" id="matchDateInput">
+          </label>
+        </div>
+        <label class="field" style="margin-top:10px;">
+          <span>Notiz</span>
+          <textarea id="matchNoteInput" rows="3" maxlength="500" placeholder="z. B. Beobachtungen zum Gegner, Aufstellungsideen…" style="resize:vertical;"></textarea>
+        </label>
+        <div id="matchFormError" class="hint hidden" style="color:var(--danger); margin-top:8px;"></div>
+        <div class="roster-form-actions" style="margin-top:12px;">
+          <button type="button" class="btn btn-accent" id="matchSaveBtn">Anlegen</button>
+          <button type="button" class="btn btn-ghost hidden" id="matchCancelEditBtn">Abbrechen</button>
+          <button type="button" class="icon-btn icon-btn-danger hidden" id="matchDeleteBtn" style="margin-left:auto;" title="Partie löschen" aria-label="Partie löschen"></button>
+        </div>
+      </section>
+      <section class="panel" id="matchListPanel">
+        <h2 class="panel-title">Partien (<span id="matchCount">0</span>)</h2>
+        <div id="matchListEmpty" class="hint">Noch keine Partien angelegt.</div>
+        <div id="matchList" class="match-list"></div>
+        <div class="hint" style="margin-top:10px;">Wird automatisch gespeichert. Eine Partie öffnen zeigt deren eigene, von der allgemeinen Bibliothek getrennte Taktik-Sammlung im Taktik-Bereich.</div>
       </section>
     </div>
   </div>
@@ -3180,6 +3270,10 @@
     activeLibraryId: null,
     activeFolderId: '__all__',
     title: '',
+    // Wenn gesetzt, ist die Taktik-Bibliothek auf die Taktiken dieser Partie
+    // beschraenkt (siehe Partien-Bereich) statt die allgemeine Bibliothek zu
+    // zeigen -- neue/autosave-erzeugte Eintraege erben diese matchId.
+    activeMatchId: null,
   };
 
   function applyPitchAspect() {
@@ -3214,6 +3308,7 @@
     if (scn.pitchPreset) state.pitchPreset = scn.pitchPreset;
     playState = null;
     situationTitleInput.value = state.title;
+    templateToggle.checked = !!scn.isTemplate;
     pitchSizeSelect.value = state.pitchPreset;
     applyPitchAspect();
     updateInspector();
@@ -3237,6 +3332,8 @@
   const pitchWrap = document.getElementById('pitchWrap');
   const pitchSizeSelect = document.getElementById('pitchSizeSelect');
   const situationTitleInput = document.getElementById('situationTitleInput');
+  const templateToggle = document.getElementById('templateToggle');
+  const matchScopeBanner = document.getElementById('matchScopeBanner');
   const frameReadout = document.getElementById('frameReadout');
   const framesList = document.getElementById('framesList');
   const addFrameBtn = document.getElementById('addFrameBtn');
@@ -3271,6 +3368,21 @@
   const markerLabelSwatchBtn = document.getElementById('markerLabelSwatchBtn');
   const markerLabelPopover = document.getElementById('markerLabelPopover');
   const playerControls = document.getElementById('playerControls');
+  const playerRoleField = document.getElementById('playerRoleField');
+  const playerRoleSelect = document.getElementById('playerRoleSelect');
+  // Aufruf erst weiter unten, nachdem STANDARD_ROLE_LABELS definiert ist
+  // (siehe Aufruf direkt nach dessen Deklaration) -- hier nur die
+  // Funktionsdeklaration, damit sie am DOM-Referenzen-Block steht.
+  function populatePlayerRoleSelect() {
+    const noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = '— keine Rolle —';
+    playerRoleSelect.appendChild(noneOpt);
+    Object.keys(STANDARD_ROLE_LABELS).forEach((key) => {
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = STANDARD_ROLE_LABELS[key];
+      playerRoleSelect.appendChild(opt);
+    });
+  }
   const playerBorderInput = document.getElementById('playerBorderInput');
   const playerBorderHexInput = document.getElementById('playerBorderHexInput');
   const playerBorderSwatchBtn = document.getElementById('playerBorderSwatchBtn');
@@ -3368,6 +3480,7 @@
   const viewTabButtons = document.querySelectorAll('.view-tab');
   const taktikView = document.getElementById('taktikView');
   const teamView = document.getElementById('teamView');
+  const matchesView = document.getElementById('matchesView');
   const rosterQuickPanel = document.getElementById('rosterQuickPanel');
   const rosterQuickEmpty = document.getElementById('rosterQuickEmpty');
   const rosterQuickList = document.getElementById('rosterQuickList');
@@ -3388,6 +3501,17 @@
   const rosterDeleteBtn = document.getElementById('rosterDeleteBtn');
   const rosterCount = document.getElementById('rosterCount');
   const rosterExportCsvBtn = document.getElementById('rosterExportCsvBtn');
+  const matchOpponentInput = document.getElementById('matchOpponentInput');
+  const matchDateInput = document.getElementById('matchDateInput');
+  const matchNoteInput = document.getElementById('matchNoteInput');
+  const matchFormError = document.getElementById('matchFormError');
+  const matchFormTitle = document.getElementById('matchFormTitle');
+  const matchSaveBtn = document.getElementById('matchSaveBtn');
+  const matchCancelEditBtn = document.getElementById('matchCancelEditBtn');
+  const matchDeleteBtn = document.getElementById('matchDeleteBtn');
+  const matchCount = document.getElementById('matchCount');
+  const matchListEmpty = document.getElementById('matchListEmpty');
+  const matchList = document.getElementById('matchList');
   const rosterDeleteAllBtn = document.getElementById('rosterDeleteAllBtn');
   const rosterLoadError = document.getElementById('rosterLoadError');
   const rosterLoadRetryBtn = document.getElementById('rosterLoadRetryBtn');
@@ -3443,6 +3567,17 @@
   const lineBorderHiddenInput = document.getElementById('lineBorderHiddenInput');
 
   situationTitleInput.addEventListener('input', () => { state.title = situationTitleInput.value; scheduleAutosave(); scheduleHistoryCapture(); });
+  // "Als Vorlage speichern" wirkt direkt auf den aktuell aktiven
+  // Bibliothekseintrag (legt bei Bedarf einen an, wie jede andere
+  // inhaltliche Änderung auch) statt erst beim nächsten Autosave.
+  templateToggle.addEventListener('change', () => {
+    const entry = findOrCreateActiveEntry();
+    entry.isTemplate = templateToggle.checked;
+    persistLibrary();
+    renderFolderMenu();
+    renderLibraryList();
+    updateInspector();
+  });
 
   /* ============================================================
      Small popovers: color swatch pickers, the "Elemente" add-menu,
@@ -3619,37 +3754,171 @@
   }
 
   /* ============================================================
-     Standard-Attribute (Kaderformular) — 6 Bewertungen je Spieler:in,
-     Skala 1 (sehr schlecht) bis 10 (sehr gut), Körpergröße als Ausnahme
-     objektiv in cm. Datengrundlage für eine spätere automatische
-     Zuteilung "beste Startelf für Standard X" (noch nicht umgesetzt).
+     Standard-Attribute (Kaderformular) — 10 Bewertungen je Spieler:in,
+     Skala 1 (sehr schlecht) bis 10 (sehr gut), Größe als Ausnahme
+     objektiv in cm. Datengrundlage für die Rollen-Zuteilung bei
+     Taktik-Vorlagen (siehe STANDARD_ROLE_ATTRIBUTE_WEIGHTS,
+     scorePlayerForRole, solveOptimalAssignment).
      ============================================================ */
 
   const ATTRIBUTE_DEFS = [
-    { key: 'headingStrength', label: 'Kopfballstärke', kind: 'scale' },
-    { key: 'duelStrength', label: 'Zweikampf-/Robustheit', kind: 'scale' },
-    { key: 'anticipationPositioning', label: 'Antizipation & Stellungsspiel', kind: 'scale' },
+    { key: 'finishing', label: 'Abschluss', kind: 'scale' },
+    { key: 'headingStrength', label: 'Kopfball', kind: 'scale' },
+    { key: 'crossing', label: 'Flanken', kind: 'scale' },
+    { key: 'longShots', label: 'Distanzschüsse', kind: 'scale' },
+    { key: 'strength', label: 'Stärke', kind: 'scale' },
     { key: 'speed', label: 'Schnelligkeit', kind: 'scale' },
-    { key: 'techniquePrecision', label: 'Technik & Präzision am Ball', kind: 'scale' },
-    { key: 'heightCm', label: 'Körpergröße (cm)', kind: 'height' },
+    { key: 'duelStrength', label: 'Zweikampf', kind: 'scale' },
+    { key: 'heightCm', label: 'Größe (cm)', kind: 'height' },
+    { key: 'techniquePrecision', label: 'Technik', kind: 'scale' },
+    { key: 'anticipationPositioning', label: 'Spielintelligenz', kind: 'scale' },
   ];
 
-  // Rollen der Eckball-Varianten (London/Block/Traube/Zug/Kurze Ecke
-  // offensiv, Ecke defensiv) und ihre wichtigsten Attribute — reine
-  // Datengrundlage für eine spätere automatische Zuteilung, aktuell noch
-  // ungenutzt (siehe Abstimmung mit dem Trainer).
-  const STANDARD_ROLE_ATTRIBUTE_WEIGHTS = {
-    schuetzin: ['techniquePrecision'],
-    traube: ['headingStrength', 'duelStrength'],
-    elfer: ['headingStrength', 'techniquePrecision'],
-    kurzerPfosten: ['headingStrength', 'speed'],
-    fuenfer: ['anticipationPositioning', 'speed'],
-    blocker: ['heightCm', 'duelStrength'],
-    rueckraum: ['anticipationPositioning', 'speed'],
-    kontersicherung: ['anticipationPositioning', 'speed'],
-    kopfball: ['headingStrength', 'heightCm'],
-    vorne: ['speed', 'anticipationPositioning'],
+  // Kurzschlüssel je Attribut, wie sie in STANDARD_ROLE_ATTRIBUTE_WEIGHTS und
+  // scorePlayerForRole verwendet werden — bewusst kompakter als die
+  // ATTRIBUTE_DEFS-keys (die aus historischen Gründen z. B. "headingStrength"
+  // statt "heading" heißen, siehe DB-Spalten/API).
+  const ATTRIBUTE_SHORT_KEYS = {
+    finishing: 'finishing',
+    heading: 'headingStrength',
+    crossing: 'crossing',
+    longShots: 'longShots',
+    strength: 'strength',
+    speed: 'speed',
+    duels: 'duelStrength',
+    height: 'heightCm',
+    technique: 'techniquePrecision',
+    gameIntelligence: 'anticipationPositioning',
   };
+
+  // Rollen der Eckball-Varianten (London/Block/Traube/Zug/Kurze Ecke
+  // offensiv, Ecke defensiv) mit numerischer Gewichtung je Attribut
+  // (0 = irrelevant, 1 = leicht relevant, 2 = wichtig, 3 = entscheidend).
+  // Grundlage für scorePlayerForRole() und die automatische
+  // Vorlagen-Zuteilung (solveOptimalAssignment).
+  const STANDARD_ROLE_ATTRIBUTE_WEIGHTS = {
+    schuetzin: { technique: 3, crossing: 3, longShots: 1, gameIntelligence: 2 },
+    traube: { heading: 2, strength: 2, duels: 2, height: 1 },
+    elfer: { finishing: 3, heading: 2, gameIntelligence: 2 },
+    kurzerPfosten: { speed: 2, heading: 2, gameIntelligence: 2 },
+    fuenfer: { heading: 2, strength: 2, gameIntelligence: 1 },
+    blocker: { strength: 3, duels: 2, height: 1 },
+    rueckraum: { gameIntelligence: 2, longShots: 1, speed: 1 },
+    kontersicherung: { speed: 2, gameIntelligence: 2, duels: 1 },
+    kopfball: { heading: 3, height: 2, strength: 2, duels: 1 },
+    vorne: { speed: 3, gameIntelligence: 1, finishing: 1 },
+  };
+
+  const STANDARD_ROLE_LABELS = {
+    schuetzin: 'Schützin',
+    traube: 'Traube',
+    elfer: 'Elfer',
+    kurzerPfosten: 'Kurzer Pfosten',
+    fuenfer: 'Fünfer',
+    blocker: 'Blocker',
+    rueckraum: 'Rückraum',
+    kontersicherung: 'Kontersicherung',
+    kopfball: 'Kopfball',
+    vorne: 'Vorne',
+  };
+  populatePlayerRoleSelect();
+
+  // Eignungs-Score einer Spielerin für eine Standard-Rolle: gewichteter
+  // Durchschnitt (0-10) der für diese Rolle relevanten Attribute. Fehlende
+  // (null) Attribute fließen neutral mit 5 ein, damit unvollständig
+  // gepflegte Bestandsdaten nicht automatisch auf 0 fallen und so jede
+  // Auswertung verzerren.
+  function scorePlayerForRole(player, roleKey) {
+    const weights = STANDARD_ROLE_ATTRIBUTE_WEIGHTS[roleKey];
+    if (!weights) return 0;
+    let weightedSum = 0;
+    let weightTotal = 0;
+    Object.keys(weights).forEach((shortKey) => {
+      const w = weights[shortKey];
+      if (!w) return;
+      const attrKey = ATTRIBUTE_SHORT_KEYS[shortKey];
+      const raw = attrKey ? player[attrKey] : null;
+      const value = attrKey === 'heightCm'
+        ? (raw != null ? Math.max(1, Math.min(10, Math.round(((raw - 150) / (200 - 150)) * 9) + 1)) : 5)
+        : (raw != null ? raw : 5);
+      weightedSum += value * w;
+      weightTotal += w;
+    });
+    if (weightTotal === 0) return 0;
+    return weightedSum / weightTotal;
+  }
+
+  // Ungarische Methode (Kuhn-Munkres) zur global-optimalen Zuordnung von
+  // Rollen-Slots zu Spielerinnen, so dass die Summe aller Scores maximal
+  // wird (statt pro Rolle greedy die "lokal beste" Spielerin zu wählen, was
+  // zu Konflikten führen könnte, wenn zwei Rollen dieselbe Top-Spielerin
+  // wollen). `roleKeys` und `players` können unterschiedlich lang sein —
+  // überzählige Rollen bzw. Spielerinnen bleiben unzugeordnet (null).
+  // Implementierung: klassischer O(n^3) Kuhn-Munkres auf einer quadratisch
+  // aufgefüllten Kostenmatrix (Kosten = negativer Score, da die Methode
+  // minimiert).
+  function solveOptimalAssignment(roleKeys, players, scoreFn) {
+    const n = Math.max(roleKeys.length, players.length);
+    if (n === 0) return [];
+    const INF = 1e9;
+    const cost = [];
+    for (let i = 0; i < n; i++) {
+      const row = [];
+      for (let j = 0; j < n; j++) {
+        if (i < roleKeys.length && j < players.length) {
+          row.push(-scoreFn(players[j], roleKeys[i]));
+        } else {
+          row.push(0);
+        }
+      }
+      cost.push(row);
+    }
+
+    // Kuhn-Munkres mit Potenzialen (u, v) und augmentierenden Pfaden,
+    // 1-indexiert wie die Standard-Referenzimplementierung.
+    const u = new Array(n + 1).fill(0);
+    const v = new Array(n + 1).fill(0);
+    const p = new Array(n + 1).fill(0);
+    const way = new Array(n + 1).fill(0);
+    for (let i = 1; i <= n; i++) {
+      p[0] = i;
+      let j0 = 0;
+      const minv = new Array(n + 1).fill(INF);
+      const used = new Array(n + 1).fill(false);
+      do {
+        used[j0] = true;
+        const i0 = p[j0];
+        let delta = INF;
+        let j1 = -1;
+        for (let j = 1; j <= n; j++) {
+          if (!used[j]) {
+            const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+            if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+            if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+          }
+        }
+        for (let j = 0; j <= n; j++) {
+          if (used[j]) { u[p[j]] += delta; v[j] -= delta; }
+          else { minv[j] -= delta; }
+        }
+        j0 = j1;
+      } while (p[j0] !== 0);
+      do {
+        const j1 = way[j0];
+        p[j0] = p[j1];
+        j0 = j1;
+      } while (j0 !== 0);
+    }
+
+    const roleToPlayer = new Array(roleKeys.length).fill(null);
+    for (let j = 1; j <= n; j++) {
+      const i = p[j] - 1;
+      if (i < roleKeys.length && j - 1 < players.length) {
+        roleToPlayer[i] = players[j - 1];
+      }
+    }
+    return roleToPlayer;
+  }
 
   // Zeigt das Attribute-Modal vorbefüllt mit `initial` (z. B. draftAttributes
   // oder {} bei einer neuen Spieler:in) und löst mit dem eingegebenen
@@ -3660,7 +3929,7 @@
       modalBox.innerHTML = '';
       modalBox.classList.add('modal-box-wide');
       const h = document.createElement('div'); h.className = 'modal-title'; h.textContent = 'Standard-Attribute';
-      const p = document.createElement('div'); p.className = 'modal-text'; p.textContent = 'Bewertung 1 (sehr schlecht) bis 10 (sehr gut). Körpergröße als Messwert in cm.';
+      const p = document.createElement('div'); p.className = 'modal-text'; p.textContent = 'Bewertung 1 (sehr schlecht) bis 10 (sehr gut). Größe als Messwert in cm.';
       modalBox.append(h, p);
 
       const inputs = {};
@@ -4085,6 +4354,10 @@
       speed: row.speed == null ? null : row.speed,
       techniquePrecision: row.technique_precision == null ? null : row.technique_precision,
       heightCm: row.height_cm == null ? null : row.height_cm,
+      finishing: row.finishing == null ? null : row.finishing,
+      crossing: row.crossing == null ? null : row.crossing,
+      longShots: row.long_shots == null ? null : row.long_shots,
+      strength: row.strength == null ? null : row.strength,
     };
   }
   async function loadRosterFromServer() {
@@ -4323,14 +4596,10 @@
     rosterNumberInput.value = p.number == null ? '' : p.number;
     rosterInitialsInput.value = p.initials || defaultInitials(p.firstName, p.lastName);
     initialsManuallyEdited = true; // beim Bearbeiten nie automatisch überschreiben
-    draftAttributes = {
-      headingStrength: p.headingStrength != null ? p.headingStrength : null,
-      duelStrength: p.duelStrength != null ? p.duelStrength : null,
-      anticipationPositioning: p.anticipationPositioning != null ? p.anticipationPositioning : null,
-      speed: p.speed != null ? p.speed : null,
-      techniquePrecision: p.techniquePrecision != null ? p.techniquePrecision : null,
-      heightCm: p.heightCm != null ? p.heightCm : null,
-    };
+    draftAttributes = {};
+    ATTRIBUTE_DEFS.forEach((def) => {
+      draftAttributes[def.key] = p[def.key] != null ? p[def.key] : null;
+    });
     attributesConfirmed = true; // Bestandseintrag: Attribute-Pflicht gilt nur fürs Neuanlegen
     rosterFormError.classList.add('hidden');
     rosterFormTitle.textContent = 'Spieler:in bearbeiten';
@@ -4370,9 +4639,7 @@
     if (roster.length === 0) return;
     const headers = [
       'Nr.', 'Vorname', 'Nachname', 'Spitzname', 'Kürzel', 'Position 1', 'Position 2',
-      'Geburtsdatum', 'Status', 'Kopfballstärke', 'Zweikampf-/Robustheit',
-      'Antizipation & Stellungsspiel', 'Schnelligkeit', 'Technik & Präzision am Ball',
-      'Körpergröße (cm)',
+      'Geburtsdatum', 'Status', ...ATTRIBUTE_DEFS.map((def) => def.label),
     ];
     const statusLabels = { start: 'Startelf', bench: 'Auswechselspieler:in', hidden: 'Ausgeblendet', injured: 'Verletzt' };
     const rows = rosterSortedForTable().map((p) => [
@@ -4385,12 +4652,7 @@
       p.position2 || '',
       toDateOnlyString(p.birthdate),
       statusLabels[rosterStatusOf(p)],
-      p.headingStrength != null ? p.headingStrength : '',
-      p.duelStrength != null ? p.duelStrength : '',
-      p.anticipationPositioning != null ? p.anticipationPositioning : '',
-      p.speed != null ? p.speed : '',
-      p.techniquePrecision != null ? p.techniquePrecision : '',
-      p.heightCm != null ? p.heightCm : '',
+      ...ATTRIBUTE_DEFS.map((def) => (p[def.key] != null ? p[def.key] : '')),
     ]);
     // ﻿ (UTF-8 BOM) voran, damit Excel die Umlaute auch ohne
     // manuelle Kodierungswahl beim Öffnen korrekt darstellt.
@@ -4664,13 +4926,10 @@
       birthdate: birthdateVal || null,
       number: numberVal ? clamp(parseInt(numberVal, 10), 0, 99) : null,
       initials: initialsVal,
-      headingStrength: attrs.headingStrength != null ? attrs.headingStrength : null,
-      duelStrength: attrs.duelStrength != null ? attrs.duelStrength : null,
-      anticipationPositioning: attrs.anticipationPositioning != null ? attrs.anticipationPositioning : null,
-      speed: attrs.speed != null ? attrs.speed : null,
-      techniquePrecision: attrs.techniquePrecision != null ? attrs.techniquePrecision : null,
-      heightCm: attrs.heightCm != null ? attrs.heightCm : null,
     };
+    ATTRIBUTE_DEFS.forEach((def) => {
+      data[def.key] = attrs[def.key] != null ? attrs[def.key] : null;
+    });
     if (editingRosterId) {
       const p = roster.find((r) => r.id === editingRosterId);
       if (p) Object.assign(p, data);
@@ -4700,6 +4959,192 @@
   [rosterFirstNameInput, rosterLastNameInput, rosterNicknameInput, rosterBirthdateInput, rosterNumberInput, rosterInitialsInput].forEach((input) => {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); rosterSaveBtn.click(); }
+    });
+  });
+
+  /* ============================================================
+     Partien (Matches) — schlanke CRUD-Verwaltung (Gegner/Datum/Notiz),
+     Formular- und Listen-Aufbau analog zum Kaderformular oben. "Öffnen"
+     setzt state.activeMatchId und wechselt in den Taktik-Bereich, wo die
+     Bibliothek dann automatisch auf diese Partie gescopt ist (siehe
+     libraryScopePool).
+     ============================================================ */
+
+  let editingMatchId = null;
+
+  function clearMatchForm() {
+    matchOpponentInput.value = '';
+    matchDateInput.value = '';
+    matchNoteInput.value = '';
+    matchFormError.classList.add('hidden');
+    editingMatchId = null;
+    matchFormTitle.textContent = 'Partie anlegen';
+    matchSaveBtn.textContent = 'Anlegen';
+    matchCancelEditBtn.classList.add('hidden');
+    matchDeleteBtn.classList.add('hidden');
+  }
+
+  function startEditMatch(id) {
+    const m = matches.find((x) => x.id === id);
+    if (!m) return;
+    editingMatchId = id;
+    matchOpponentInput.value = m.opponentName || '';
+    matchDateInput.value = m.matchDate || '';
+    matchNoteInput.value = m.note || '';
+    matchFormError.classList.add('hidden');
+    matchFormTitle.textContent = 'Partie bearbeiten';
+    matchSaveBtn.textContent = 'Speichern';
+    matchCancelEditBtn.classList.remove('hidden');
+    matchDeleteBtn.classList.remove('hidden');
+  }
+
+  function deleteMatchEntry(id) {
+    matches = matches.filter((m) => m.id !== id);
+    // Zugeordnete Taktiken bleiben erhalten, verlieren aber die
+    // Partie-Zuordnung -- sonst wuerden sie unsichtbar (weder in der
+    // allgemeinen Bibliothek noch in einer Partie), da libraryScopePool
+    // strikt nach matchId filtert.
+    let libraryChanged = false;
+    library.forEach((e) => {
+      if (e.matchId === id) { e.matchId = null; libraryChanged = true; }
+    });
+    if (libraryChanged) persistLibrary();
+    if (state.activeMatchId === id) state.activeMatchId = null;
+    renderFolderMenu();
+    renderLibraryList();
+    renderMatchScopeBanner();
+    persistMatches();
+    renderMatchList();
+  }
+
+  function formatMatchDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}.${m}.${y}`;
+    } catch (e) { return dateStr; }
+  }
+
+  function renderMatchScopeBanner() {
+    if (!state.activeMatchId) {
+      matchScopeBanner.classList.add('hidden');
+      matchScopeBanner.innerHTML = '';
+      return;
+    }
+    const m = matches.find((x) => x.id === state.activeMatchId);
+    matchScopeBanner.classList.remove('hidden');
+    matchScopeBanner.innerHTML = '';
+    const text = document.createElement('span');
+    text.textContent = m ? `Partie: ${m.opponentName}${m.matchDate ? ' · ' + formatMatchDate(m.matchDate) : ''}` : 'Partie';
+    const backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'btn btn-ghost btn-sm';
+    backBtn.textContent = 'Allgemeine Bibliothek';
+    backBtn.addEventListener('click', () => {
+      state.activeMatchId = null;
+      renderFolderMenu();
+      renderLibraryList();
+      renderMatchScopeBanner();
+    });
+    matchScopeBanner.append(text, backBtn);
+  }
+
+  function openMatch(id) {
+    const m = matches.find((x) => x.id === id);
+    if (!m) return;
+    state.activeMatchId = id;
+    setActiveView('taktik');
+    renderFolderMenu();
+    renderLibraryList();
+    renderMatchScopeBanner();
+  }
+
+  function renderMatchList() {
+    matchCount.textContent = String(matches.length);
+    matchList.innerHTML = '';
+    matchListEmpty.classList.toggle('hidden', matches.length > 0);
+    matches
+      .slice()
+      .sort((a, b) => (b.matchDate || '').localeCompare(a.matchDate || ''))
+      .forEach((m) => {
+        const card = document.createElement('div');
+        card.className = 'match-card';
+
+        const meta = document.createElement('div');
+        meta.className = 'match-meta';
+        const nameEl = document.createElement('div');
+        nameEl.className = 'match-name lib-clickable';
+        nameEl.textContent = m.opponentName;
+        nameEl.title = 'Klicken zum Öffnen';
+        nameEl.addEventListener('click', () => openMatch(m.id));
+        const dateEl = document.createElement('div');
+        dateEl.className = 'hint';
+        dateEl.style.margin = '0';
+        const tacticCount = library.filter((e) => (e.matchId || null) === m.id).length;
+        dateEl.textContent = [formatMatchDate(m.matchDate), `${tacticCount} Taktik${tacticCount === 1 ? '' : 'en'}`].filter(Boolean).join(' · ');
+        meta.append(nameEl, dateEl);
+        if (m.note) {
+          const noteEl = document.createElement('div');
+          noteEl.className = 'hint';
+          noteEl.style.margin = '4px 0 0';
+          noteEl.textContent = m.note;
+          meta.appendChild(noteEl);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'lib-actions';
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-ghost btn-sm';
+        editBtn.textContent = 'Bearbeiten';
+        editBtn.addEventListener('click', () => startEditMatch(m.id));
+        actions.appendChild(editBtn);
+
+        card.append(meta, actions);
+        matchList.appendChild(card);
+      });
+  }
+
+  matchSaveBtn.addEventListener('click', () => {
+    const opponentName = matchOpponentInput.value.trim();
+    if (!opponentName) {
+      matchFormError.textContent = 'Gegner ist ein Pflichtfeld.';
+      matchFormError.classList.remove('hidden');
+      return;
+    }
+    const data = {
+      opponentName,
+      matchDate: matchDateInput.value || null,
+      note: matchNoteInput.value.trim(),
+    };
+    if (editingMatchId) {
+      const m = matches.find((x) => x.id === editingMatchId);
+      if (m) Object.assign(m, data);
+    } else {
+      matches.push({ id: genMatchId(), ...data });
+    }
+    persistMatches();
+    renderMatchList();
+    clearMatchForm();
+  });
+  matchCancelEditBtn.addEventListener('click', clearMatchForm);
+  matchDeleteBtn.addEventListener('click', async () => {
+    if (!editingMatchId) return;
+    const m = matches.find((x) => x.id === editingMatchId);
+    if (!m) return;
+    const confirmed = await confirmModal({
+      title: 'Partie löschen?',
+      text: `„${m.opponentName}“ wird endgültig gelöscht. Zugeordnete Taktiken bleiben in der Bibliothek erhalten, verlieren aber die Partie-Zuordnung.`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Abbrechen',
+    });
+    if (!confirmed) return;
+    deleteMatchEntry(m.id);
+    clearMatchForm();
+  });
+  [matchOpponentInput, matchDateInput].forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); matchSaveBtn.click(); }
     });
   });
 
@@ -5163,6 +5608,7 @@
     state.activeView = view;
     taktikView.classList.toggle('hidden', view !== 'taktik');
     teamView.classList.toggle('hidden', view !== 'team');
+    matchesView.classList.toggle('hidden', view !== 'matches');
     viewTabButtons.forEach((b) => b.classList.toggle('active', b.dataset.view === view));
     // Ein Wechsel weg von der Taktik-Ansicht ist wie ein Tab-/Fenster-
     // wechsel zu behandeln: eine laufende Wiedergabe pausiert, ein
@@ -5821,6 +6267,8 @@
 
     if (el.type === 'player') {
       playerControls.classList.remove('hidden');
+      playerRoleField.classList.toggle('hidden', !isActiveEntryTemplate());
+      playerRoleSelect.value = el.templateRole || '';
       const pFill = resolvePlayerFillColor(el, state.teamColors);
       playerFillInput.value = pFill;
       playerFillHexInput.value = pFill.toUpperCase();
@@ -5979,6 +6427,14 @@
     const el = state.elements.find((e) => e.id === state.selectedId);
     if (!el) return;
     el.label = labelInput.value;
+    render();
+    refreshFrameThumb(state.currentFrame);
+  });
+  playerRoleSelect.addEventListener('change', () => {
+    const el = state.elements.find((e) => e.id === state.selectedId);
+    if (!el || el.type !== 'player') return;
+    if (playerRoleSelect.value) el.templateRole = playerRoleSelect.value;
+    else delete el.templateRole;
     render();
     refreshFrameThumb(state.currentFrame);
   });
@@ -7286,6 +7742,7 @@
   redoBtn.innerHTML = ICON_REDO;
   logoutBtn.innerHTML = ICON_DOOR_OPEN;
   rosterDeleteBtn.innerHTML = ICON_TRASH;
+  matchDeleteBtn.innerHTML = ICON_TRASH;
   function setPlayIcon(isPlaying) {
     playBtn.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
     playBtn.title = isPlaying ? 'Pause' : 'Abspielen';
@@ -7325,6 +7782,37 @@
   // Skriptende asynchron von /api/folders befuellt.
   let folders = [];
 
+  /* ============================================================
+     Partien (Matches) — eigener Hauptbereich fuer partie-spezifische
+     Taktiken (siehe libraryScopePool/state.activeMatchId weiter oben).
+     Gleiches Bulk-Replace-Muster wie Ordner/Kader/Bibliothek.
+     ============================================================ */
+
+  async function loadMatchesFromServer() {
+    try {
+      const res = await fetch('/api/matches');
+      if (!res.ok) return null;
+      const { matches: m } = await res.json();
+      return Array.isArray(m) ? m : null;
+    } catch (e) { return null; }
+  }
+  function persistMatches() {
+    fetch('/api/matches', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(matches.map((m) => ({
+        id: m.id, opponentName: m.opponentName, matchDate: m.matchDate, note: m.note,
+      }))),
+    }).catch((e) => console.error('Partien konnten nicht gespeichert werden', e));
+    return true;
+  }
+  function genMatchId() {
+    return 'match_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  // Startet leer und wird von der Bootstrap-Ladefunktion befuellt.
+  let matches = [];
+
   // Alle Ordner starten standardmäßig zugeklappt (leeres Set); außerdem
   // Akkordeon-Verhalten: es ist immer höchstens ein Ordner gleichzeitig
   // aufgeklappt — siehe openFolderExclusive() unten, das jede "Ordner
@@ -7339,9 +7827,21 @@
   // see the migration above), so "in this folder" is membership, not
   // exclusive ownership. The virtual "Alle GIFs" folder always shows
   // everything regardless of membership.
+  // Bibliotheks-Grundmenge vor der Ordner-Filterung: eine Partie (siehe
+  // Partien-Bereich, state.activeMatchId) sieht nur ihre eigenen Taktiken
+  // (entry.matchId), die allgemeine Bibliothek nur die allgemeinen
+  // (entry.matchId leer). Vorlagen (isTemplate) sind davon ausgenommen und
+  // erscheinen immer, egal in welchem Bibliotheks-Kontext man gerade ist --
+  // sie werden ja erst beim "Vorlage anwenden" einer Partie zugeordnet.
+  function libraryScopePool() {
+    const matchId = state.activeMatchId || null;
+    return library.filter((e) => e.isTemplate || (e.matchId || null) === matchId);
+  }
+
   function entriesInFolder(folderId) {
-    if (!folderId || folderId === ALL_FOLDER_ID) return library;
-    return library.filter((e) => Array.isArray(e.folderIds) && e.folderIds.includes(folderId));
+    const pool = libraryScopePool();
+    if (!folderId || folderId === ALL_FOLDER_ID) return pool;
+    return pool.filter((e) => Array.isArray(e.folderIds) && e.folderIds.includes(folderId));
   }
 
   function addEntryToFolder(entry, folderId) {
@@ -7732,9 +8232,15 @@
 
       const nameEl = document.createElement('div');
       nameEl.className = 'lib-name lib-clickable';
-      nameEl.textContent = entry.name;
       nameEl.title = `${entry.name} — klicken zum Laden`;
       nameEl.addEventListener('click', () => loadFromLibrary(entry.id));
+      if (entry.isTemplate) {
+        const badge = document.createElement('span');
+        badge.className = 'lib-badge';
+        badge.textContent = 'Vorlage';
+        nameEl.appendChild(badge);
+      }
+      nameEl.appendChild(document.createTextNode(entry.name));
 
       const dateEl = document.createElement('div');
       dateEl.className = 'hint';
@@ -7767,6 +8273,20 @@
       });
 
       actions.append(copyBtn, folderBtn);
+
+      if (entry.isTemplate) {
+        const applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'icon-btn';
+        applyBtn.innerHTML = ICON_PLAY;
+        applyBtn.title = 'Vorlage anwenden';
+        applyBtn.setAttribute('aria-label', 'Vorlage anwenden');
+        applyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          applyTemplateToLibrary(entry.id);
+        });
+        actions.appendChild(applyBtn);
+      }
 
       if (entry.gif && entry.gif.dataUrl) {
         const dlBtn = document.createElement('button');
@@ -7834,6 +8354,7 @@
       elements: JSON.parse(JSON.stringify(entry.elements || [])),
       frames: JSON.parse(JSON.stringify(entry.frames && entry.frames.length ? entry.frames : buildSingleFrameScenario().frames)),
       pitchPreset: entry.pitchPreset || 'twoThirds',
+      isTemplate: !!entry.isTemplate,
     });
     state.activeLibraryId = entry.id;
     // Clear the transient "Vorschau wird aktualisiert…" text (if it was
@@ -7871,6 +8392,159 @@
   }
 
   /* ============================================================
+     Vorlagen (Templates) — eine Vorlage ist eine ganz normale Taktik
+     (entry.isTemplate = true), deren Spieler-Elemente statt/zusätzlich zu
+     rosterId ein templateRole-Feld tragen (Schlüssel aus
+     STANDARD_ROLE_ATTRIBUTE_WEIGHTS). "Vorlage anwenden" dupliziert den
+     Eintrag und ersetzt jede templateRole-Zuweisung durch eine echte
+     Kaderspieler:in — automatisch (Ungarische Methode, solveOptimalAssignment)
+     oder manuell mit score-sortierten Vorschlägen.
+     ============================================================ */
+
+  // Zeigt pro Rollen-Slot (ein Slot je Platzierung mit templateRole, auch
+  // bei mehrfach vorkommenden Rollen) ein Dropdown mit den Startelf-
+  // Spieler:innen, sortiert nach Eignungs-Score für diese Rolle. Löst mit
+  // einem Array (gleiche Länge/Reihenfolge wie `slots`) aus gewählten
+  // Spieler-Objekten (oder null je Slot) auf, oder mit null bei Abbrechen.
+  function openRoleAssignmentModal(slots) {
+    return new Promise((resolve) => {
+      const startingPlayers = roster.filter((p) => p.starting);
+      modalBox.innerHTML = '';
+      modalBox.classList.add('modal-box-wide');
+      const h = document.createElement('div'); h.className = 'modal-title'; h.textContent = 'Rollen zuweisen';
+      const p = document.createElement('div'); p.className = 'modal-text';
+      modalBox.append(h, p);
+
+      if (startingPlayers.length === 0) {
+        p.textContent = 'Keine Startelf festgelegt — bitte im Team-Bereich zuerst Spieler:innen als Startelf markieren.';
+        const actions = document.createElement('div'); actions.className = 'modal-actions';
+        const closeBtn = document.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'btn btn-ghost'; closeBtn.textContent = 'Schließen';
+        closeBtn.addEventListener('click', () => { closeModal(); resolve(null); });
+        actions.appendChild(closeBtn);
+        modalBox.appendChild(actions);
+        modalOverlay.classList.remove('hidden');
+        return;
+      }
+      p.textContent = 'Automatisch bestmöglich besetzen oder jede Rolle manuell zuweisen. Vorschläge sind nach Eignungs-Score (0–10) für die jeweilige Rolle sortiert.';
+
+      const autoBtn = document.createElement('button');
+      autoBtn.type = 'button';
+      autoBtn.className = 'btn btn-accent btn-block';
+      autoBtn.style.marginBottom = '12px';
+      autoBtn.textContent = 'Automatisch bestmöglich besetzen';
+      modalBox.appendChild(autoBtn);
+
+      const scoreInfo = document.createElement('div');
+      scoreInfo.className = 'hint';
+      scoreInfo.style.marginBottom = '10px';
+      modalBox.appendChild(scoreInfo);
+
+      const selects = slots.map((slot, i) => {
+        const sameRoleBefore = slots.slice(0, i).filter((s) => s.roleKey === slot.roleKey).length;
+        const sameRoleTotal = slots.filter((s) => s.roleKey === slot.roleKey).length;
+        const label = (STANDARD_ROLE_LABELS[slot.roleKey] || slot.roleKey) + (sameRoleTotal > 1 ? ` #${sameRoleBefore + 1}` : '');
+
+        const field = document.createElement('label');
+        field.className = 'field';
+        field.style.marginBottom = '10px';
+        const span = document.createElement('span');
+        span.textContent = label;
+        const select = document.createElement('select');
+        const noneOpt = document.createElement('option');
+        noneOpt.value = ''; noneOpt.textContent = '— keine —';
+        select.appendChild(noneOpt);
+        startingPlayers
+          .slice()
+          .sort((a, b) => scorePlayerForRole(b, slot.roleKey) - scorePlayerForRole(a, slot.roleKey))
+          .forEach((pl) => {
+            const opt = document.createElement('option');
+            opt.value = pl.id;
+            const name = `${pl.firstName || ''} ${pl.lastName || ''}`.trim() || pl.initials || 'Unbenannt';
+            opt.textContent = `${name} – ${scorePlayerForRole(pl, slot.roleKey).toFixed(1)}`;
+            select.appendChild(opt);
+          });
+        field.append(span, select);
+        modalBox.appendChild(field);
+        return select;
+      });
+
+      autoBtn.addEventListener('click', () => {
+        const assignment = solveOptimalAssignment(slots.map((s) => s.roleKey), startingPlayers, scorePlayerForRole);
+        let totalScore = 0;
+        let filled = 0;
+        assignment.forEach((pl, i) => {
+          selects[i].value = pl ? pl.id : '';
+          if (pl) { totalScore += scorePlayerForRole(pl, slots[i].roleKey); filled += 1; }
+        });
+        scoreInfo.textContent = filled < slots.length
+          ? `${filled} von ${slots.length} Rollen besetzt — nicht genug Startelf-Spieler:innen für alle Rollen, bitte manuell ergänzen.`
+          : `Gesamt-Score: ${totalScore.toFixed(1)} (Ø ${(totalScore / filled).toFixed(1)} je Rolle).`;
+      });
+
+      const actions = document.createElement('div'); actions.className = 'modal-actions';
+      const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Abbrechen';
+      const okBtn = document.createElement('button'); okBtn.type = 'button'; okBtn.className = 'btn btn-accent'; okBtn.textContent = 'Übernehmen';
+      actions.append(cancelBtn, okBtn);
+      modalBox.appendChild(actions);
+      modalOverlay.classList.remove('hidden');
+
+      function finish(value) { closeModal(); resolve(value); }
+      okBtn.addEventListener('click', () => {
+        const result = selects.map((sel) => startingPlayers.find((pl) => pl.id === sel.value) || null);
+        finish(result);
+      });
+      cancelBtn.addEventListener('click', () => finish(null));
+    });
+  }
+
+  // Dupliziert eine Vorlage in eine echte, spielbare Taktik: alle
+  // Spieler-Elemente mit templateRole werden über das Rollen-Zuteilungs-
+  // Modal mit echten Kaderspieler:innen besetzt (analog zu den Metadaten,
+  // die addRosterPlayerToField beim Ziehen aus der Kaderliste setzt), das
+  // Ergebnis landet als normale Taktik (isTemplate:false) in der aktuell
+  // aktiven Bibliothek (allgemein oder Partie, je nach state.activeMatchId)
+  // und wird direkt zur Ansicht/Weiterbearbeitung geladen.
+  async function applyTemplateToLibrary(id) {
+    const source = library.find((e) => e.id === id);
+    if (!source) return;
+    const roleElements = (source.elements || []).filter((el) => el.type === 'player' && el.templateRole);
+    if (roleElements.length === 0) {
+      libraryStatus.textContent = 'Diese Vorlage enthält keine Rollen-Zuweisungen.';
+      return;
+    }
+    const slots = roleElements.map((el) => ({ elementId: el.id, roleKey: el.templateRole }));
+    const assignment = await openRoleAssignmentModal(slots);
+    if (!assignment) return;
+
+    const copy = JSON.parse(JSON.stringify(source));
+    copy.id = genId();
+    copy.name = uniqueEntryName(source.name, null);
+    copy.savedAt = Date.now();
+    copy.isTemplate = false;
+    copy.matchId = state.activeMatchId || null;
+
+    copy.elements.forEach((el) => {
+      if (el.type !== 'player' || !el.templateRole) return;
+      const slotIndex = slots.findIndex((s) => s.elementId === el.id);
+      const chosen = slotIndex >= 0 ? assignment[slotIndex] : null;
+      delete el.templateRole;
+      if (!chosen) return;
+      el.rosterId = chosen.id;
+      el.label = chosen.number != null ? String(chosen.number) : (chosen.initials || '');
+      el.subLabel = `${chosen.firstName || ''} ${chosen.lastName || ''}`.trim();
+      el.subLabelSource = 'fullName';
+      el.isGoalkeeper = chosen.position1 === 'TW' || chosen.position2 === 'TW';
+    });
+
+    library.push(copy);
+    const ok = persistLibrary();
+    libraryStatus.textContent = ok ? `„${copy.name}“ aus Vorlage erstellt.` : 'Anwenden fehlgeschlagen — Speicher evtl. voll.';
+    renderFolderMenu();
+    renderLibraryList();
+    if (ok) await loadFromLibrary(copy.id);
+  }
+
+  /* ============================================================
      Auto-Save — jede inhaltliche Änderung landet ohne Zutun des
      Trainers in der Bibliothek. Die reinen Daten (Elemente/Frames/
      Titel/Feldgröße) werden kurz entprellt (600ms) laufend gesichert —
@@ -7902,6 +8576,11 @@
     return `${baseName} (${n})`;
   }
 
+  function isActiveEntryTemplate() {
+    const entry = state.activeLibraryId ? library.find((e) => e.id === state.activeLibraryId) : null;
+    return !!(entry && entry.isTemplate);
+  }
+
   function findOrCreateActiveEntry() {
     let entry = state.activeLibraryId ? library.find((e) => e.id === state.activeLibraryId) : null;
     if (!entry) {
@@ -7915,6 +8594,8 @@
         frames: [],
         gif: null,
         folderIds: [],
+        isTemplate: false,
+        matchId: state.activeMatchId || null,
       };
       library.push(entry);
       state.activeLibraryId = entry.id;
@@ -8193,12 +8874,16 @@
   });
 
   (async function bootstrapPersistedData() {
-    const [, serverLibrary, serverFolders] = await Promise.all([
+    const [, serverLibrary, serverFolders, serverMatches] = await Promise.all([
       loadAndRenderRoster(),
       loadLibraryFromServer(),
       loadFoldersFromServer(),
+      loadMatchesFromServer(),
     ]);
     folders = serverFolders || [];
+    matches = (serverMatches || []).map((m) => ({
+      id: m.id, opponentName: m.opponent_name, matchDate: m.match_date, note: m.note,
+    }));
     if (serverLibrary && serverLibrary.length) {
       library = serverLibrary;
     } else {
@@ -8207,6 +8892,7 @@
       library = [makeExampleEntry()];
       persistLibrary();
     }
+    renderMatchList();
     renderFolderMenu();
     renderLibraryList();
   })();
