@@ -7787,12 +7787,49 @@
       return Array.isArray(entries) ? entries : null;
     } catch (e) { return null; }
   }
+  // Gespeichert wird pro Eintrag (nur geaenderte) statt die ganze Bibliothek
+  // samt allen GIFs in einem Request: ein Gesamt-Request ueberschritt das
+  // Vercel-Limit (~4,5 MB) und schlug still fehl. librarySyncedJson merkt
+  // sich den zuletzt erfolgreich gespeicherten Stand je Eintrag.
+  const librarySyncedJson = new Map();
+  let libraryLoadFailed = false;
+  let libraryPersistChain = Promise.resolve();
+  async function syncLibraryToServer() {
+    const current = new Map(library.map((e) => [e.id, JSON.stringify(e)]));
+    let failed = 0;
+    for (const [id, json] of current) {
+      if (librarySyncedJson.get(id) === json) continue;
+      try {
+        const res = await fetch('/api/library/' + encodeURIComponent(id), {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: json,
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        librarySyncedJson.set(id, json);
+      } catch (e) {
+        failed += 1;
+        console.error('Bibliothekseintrag konnte nicht gespeichert werden', id, e);
+      }
+    }
+    for (const id of Array.from(librarySyncedJson.keys())) {
+      if (current.has(id)) continue;
+      try {
+        const res = await fetch('/api/library/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        librarySyncedJson.delete(id);
+      } catch (e) {
+        failed += 1;
+        console.error('Bibliothekseintrag konnte nicht gelöscht werden', id, e);
+      }
+    }
+    if (failed > 0) {
+      libraryStatus.textContent = `Speichern fehlgeschlagen (${failed} Eintrag/Einträge) — bitte Seite nicht neu laden und es erneut versuchen.`;
+    } else if (libraryStatus.textContent.startsWith('Speichern fehlgeschlagen')) {
+      libraryStatus.textContent = '';
+    }
+  }
   function persistLibrary() {
-    fetch('/api/library', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(library),
-    }).catch((e) => console.error('Bibliothek konnte nicht gespeichert werden', e));
+    if (libraryLoadFailed) return false;
+    libraryPersistChain = libraryPersistChain.then(syncLibraryToServer).catch((e) => console.error(e));
     return true;
   }
   function genId() {
@@ -7890,7 +7927,9 @@
       return Array.isArray(f) ? f : null;
     } catch (e) { return null; }
   }
+  let foldersLoadFailed = false;
   function persistFolders() {
+    if (foldersLoadFailed) return false;
     fetch('/api/folders', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -7917,7 +7956,9 @@
       return Array.isArray(m) ? m : null;
     } catch (e) { return null; }
   }
+  let matchesLoadFailed = false;
   function persistMatches() {
+    if (matchesLoadFailed) return false;
     fetch('/api/matches', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -9039,8 +9080,18 @@
     matches = (serverMatches || []).map((m) => ({
       id: m.id, opponentName: m.opponent_name, matchDate: m.match_date, note: m.note,
     }));
-    if (serverLibrary && serverLibrary.length) {
+    if (serverFolders === null) foldersLoadFailed = true;
+    if (serverMatches === null) matchesLoadFailed = true;
+    if (serverLibrary === null) {
+      // Laden fehlgeschlagen: NICHT mit einer leeren/Beispiel-Bibliothek
+      // weiterarbeiten und speichern, sonst würde der Serverstand
+      // überschrieben.
+      libraryLoadFailed = true;
+      library = [];
+      libraryStatus.textContent = 'Bibliothek konnte nicht geladen werden — Speichern ist gesperrt, damit nichts überschrieben wird. Bitte Seite neu laden.';
+    } else if (serverLibrary.length) {
       library = serverLibrary;
+      serverLibrary.forEach((e) => librarySyncedJson.set(e.id, JSON.stringify(e)));
     } else {
       // Erster Aufruf ueberhaupt (leere Bibliothek auf dem Server): wie
       // bisher mit einem Beispieleintrag starten und direkt speichern.
