@@ -3334,6 +3334,7 @@
     rebuildLayersList();
     render();
     suppressAutosave = false;
+    syncTeamAPlayersWithStartelf();
     // Undo/Redo gilt nur innerhalb der gerade bearbeiteten Taktik — beim
     // Laden einer anderen (oder einer neuen, leeren) Taktik ergibt ein
     // "Rückgängig" zurück in eine vorherige Taktik keinen Sinn, daher
@@ -5910,6 +5911,20 @@
      Elements: add / select / delete / label / marker style
      ============================================================ */
 
+  // Raster um die Feldmitte, gestaffelt nach Anzahl vorhandener Elemente —
+  // Standardposition für Elemente, die ohne Drop-Position entstehen.
+  function computeDefaultElementPosition() {
+    const crop = currentCrop();
+    const cropCenterPercent = ((crop.xMin + crop.xMax) / 2 / PITCH_LENGTH) * 100;
+    const cropMinPercent = (crop.xMin / PITCH_LENGTH) * 100;
+    const cropMaxPercent = (crop.xMax / PITCH_LENGTH) * 100;
+    const n = state.elements.length;
+    return {
+      x: clamp(cropCenterPercent + ((n % 5) - 2) * 5, cropMinPercent + 3, cropMaxPercent - 3),
+      y: clamp(50 + ((Math.floor(n / 5) % 3) - 1) * 12, 6, 94),
+    };
+  }
+
   function addElement(type, team, shape, isGoalkeeper, isPlaceholder) {
     if (type === 'ball' && state.elements.some((e) => e.type === 'ball')) {
       selectElement(state.elements.find((e) => e.type === 'ball').id);
@@ -5958,13 +5973,7 @@
     }
     state.elements.push(el);
 
-    const crop = currentCrop();
-    const cropCenterPercent = ((crop.xMin + crop.xMax) / 2 / PITCH_LENGTH) * 100;
-    const cropMinPercent = (crop.xMin / PITCH_LENGTH) * 100;
-    const cropMaxPercent = (crop.xMax / PITCH_LENGTH) * 100;
-    const n = state.elements.length;
-    const defX = clamp(cropCenterPercent + ((n % 5) - 2) * 5, cropMinPercent + 3, cropMaxPercent - 3);
-    const defY = clamp(50 + ((Math.floor(n / 5) % 3) - 1) * 12, 6, 94);
+    const { x: defX, y: defY } = computeDefaultElementPosition();
     // Nur ab dem aktuell angezeigten Frame platzieren — auf früheren
     // Frames existierte dieses Element noch nicht und soll dort auch
     // nicht rückwirkend auftauchen (paintScene/interpPositions
@@ -6064,12 +6073,52 @@
     addRosterPlayerToField(p, clientToPercent(e.clientX, e.clientY));
   });
 
-  function deleteSelected() {
-    if (!state.selectedId) return;
-    const id = state.selectedId;
+  function removeElementById(id) {
     state.elements = state.elements.filter((e) => e.id !== id);
     for (const frame of state.frames) delete frame.pos[id];
-    state.selectedId = null;
+    if (state.selectedId === id) state.selectedId = null;
+  }
+
+  // Gleicht die mit dem Kader verknüpften Team-A-Spieler einer frisch
+  // geladenen Taktik mit der aktuellen Startelf ab: Nicht mehr aufgestellte
+  // werden entfernt; fehlende Startelf-Spieler:innen werden nur ergänzt,
+  // wenn die Taktik vorher eine volle 11er-Besetzung hatte (damit
+  // bewusst unvollständige Skizzen nicht aufgefüllt werden).
+  function syncTeamAPlayersWithStartelf() {
+    // Kader noch nicht (oder nicht erfolgreich) geladen, oder keine Startelf
+    // festgelegt: nichts anfassen, sonst würden alle Spieler entfernt.
+    if (rosterLoadFailed || roster.length === 0 || !roster.some((p) => p.starting)) return;
+    const linkedTeamAEls = () =>
+      state.elements.filter((el) => el.type === 'player' && el.team === 'A' && el.rosterId);
+    const hadFullStartelf = new Set(linkedTeamAEls().map((el) => el.rosterId)).size === 11;
+    const startingIds = new Set(roster.filter((p) => p.starting).map((p) => p.id));
+    let changed = false;
+
+    linkedTeamAEls().forEach((el) => {
+      if (!startingIds.has(el.rosterId)) { removeElementById(el.id); changed = true; }
+    });
+
+    if (hadFullStartelf) {
+      const presentIds = new Set(linkedTeamAEls().map((el) => el.rosterId));
+      roster.filter((p) => p.starting && !presentIds.has(p.id)).forEach((p) => {
+        addRosterPlayerToField(p, computeDefaultElementPosition());
+        changed = true;
+      });
+    }
+
+    if (changed) {
+      state.selectedId = null;
+      updateInspector();
+      rebuildFramesList();
+      rebuildLayersList();
+      render();
+      scheduleAutosave();
+    }
+  }
+
+  function deleteSelected() {
+    if (!state.selectedId) return;
+    removeElementById(state.selectedId);
     updateInspector();
     rebuildFramesList();
     rebuildLayersList();
