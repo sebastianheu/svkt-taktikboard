@@ -1277,6 +1277,7 @@
     font-size: 13px;
   }
   .roster-chip:active { cursor: grabbing; }
+  .roster-chip-used { opacity: 0.4; }
   .roster-chip-num {
     font-family: 'Oswald', sans-serif;
     font-weight: 700;
@@ -1464,7 +1465,7 @@
         <h2 class="panel-title">Kader</h2>
         <div id="rosterQuickEmpty" class="hint">Noch keine Spieler:innen im Team-Reiter angelegt.</div>
         <div id="rosterQuickList" class="roster-chip-list hidden"></div>
-        <div class="hint" id="rosterQuickHint" style="margin-top:0;">Spielerin auf das Feld ziehen, um sie dort zu platzieren.</div>
+        <div class="hint" id="rosterQuickHint" style="margin-top:0;">Spielerin auf das Feld oder auf ein Icon ziehen. Ausgegraut = schon in der Taktik; auf ein anderes Icon ziehen tauscht die Positionen.</div>
       </section>
       <section class="panel" id="inspector">
         <h2 class="panel-title" id="inspectorTitle">Auswahl</h2>
@@ -4863,14 +4864,19 @@
   // without leaving the tactic currently being edited.
   function renderRosterQuickList() {
     rosterQuickList.innerHTML = '';
-    // Verletzte oder ausgeblendete Spieler:innen (z. B. am Spieltag nicht
-    // dabei) erscheinen hier bewusst nicht — sie bleiben im Team-Reiter
-    // aber weiterhin vollständig sichtbar/verwaltbar (siehe renderRosterList).
-    const eligible = rosterSortedByNumber().filter((p) => !p.injured && !p.hidden);
+    // Nur die Startelf erscheint hier — Bank, Verletzte und Ausgeblendete
+    // bleiben im Team-Reiter weiterhin vollständig sichtbar/verwaltbar
+    // (siehe renderRosterList).
+    const eligible = rosterSortedByNumber().filter((p) => rosterStatusOf(p) === 'start');
+    // Schon in der aktuellen Taktik eingesetzte Spielerinnen werden
+    // ausgegraut (bleiben aber ziehbar: Ziehen auf ein anderes Icon tauscht).
+    const usedIds = new Set(
+      state.elements.filter((el) => el.type === 'player' && el.rosterId).map((el) => el.rosterId)
+    );
     if (eligible.length === 0) {
       rosterQuickEmpty.textContent = roster.length === 0
         ? 'Noch keine Spieler:innen im Team-Reiter angelegt.'
-        : 'Alle Spieler:innen sind aktuell als verletzt oder ausgeblendet markiert.';
+        : 'Keine Startelf festgelegt — im Team-Reiter Spielerinnen als Startelf markieren.';
       rosterQuickEmpty.classList.remove('hidden');
       rosterQuickList.classList.add('hidden');
       rosterQuickHint.classList.add('hidden');
@@ -4889,7 +4895,11 @@
       if (posLabel) titleBits.push(posLabel);
       const chipAge = p.birthdate ? computeAgeFromBirthdate(p.birthdate) : p.age;
       if (chipAge != null) titleBits.push(`${chipAge} Jahre`);
-      chip.title = titleBits.join(' — ') + ' — auf das Feld ziehen';
+      const isUsed = usedIds.has(p.id);
+      if (isUsed) chip.classList.add('roster-chip-used');
+      chip.title = titleBits.join(' — ') + (isUsed
+        ? ' — bereits in der Taktik; auf ein anderes Icon ziehen zum Tauschen'
+        : ' — auf das Feld ziehen');
 
       const num = document.createElement('span');
       num.className = 'roster-chip-num';
@@ -6044,8 +6054,11 @@
   // unterscheidet sich) — damit ist die Spielerin automatisch in jedem
   // Frame an der jeweiligen Position.
   function fillPlaceholderWithRosterPlayer(el, p) {
+    // Wurde ein Platzhalter besetzt, merkt sich das Element das
+    // (slotPlaceholder) — beim Löschen der Spielerin kommt dann wieder der
+    // Platzhalter zurück (siehe deleteSelected).
+    if (el.placeholder) el.slotPlaceholder = true;
     delete el.placeholder;
-    delete el.templateRole;
     el.rosterId = p.id;
     el.label = p.number == null ? '' : String(p.number);
     el.subLabel = subLabelForRosterPlayer(p);
@@ -6068,12 +6081,38 @@
     const hitEl = hitId ? state.elements.find((el) => el.id === hitId) : null;
     // Drop auf ein vorhandenes eigenes Spielericon (Platzhalter oder bereits
     // besetzt): Nummer und Name der gezogenen Spielerin ersetzen die alten.
+    const existingEl = state.elements.find((el) => el.type === 'player' && el.team === 'A' && el.rosterId === p.id);
     if (hitEl && hitEl.type === 'player' && hitEl.team === 'A') {
-      fillPlaceholderWithRosterPlayer(hitEl, p);
+      if (existingEl) {
+        // Spielerin ist schon in der Taktik (ausgegrauter Name): die beiden
+        // Icons tauschen ihre Spielerinnen/Positionen.
+        if (existingEl.id !== hitEl.id) swapPlayerIdentities(existingEl, hitEl);
+      } else {
+        fillPlaceholderWithRosterPlayer(hitEl, p);
+      }
       return;
     }
+    // Eine bereits eingesetzte Spielerin nicht ein zweites Mal aufs Feld legen.
+    if (existingEl) return;
     addRosterPlayerToField(p, clientToPercent(e.clientX, e.clientY));
   });
+
+  // Tauscht zwei Team-A-Spielericons ihre Spielerinnen (bzw. Platzhalter):
+  // Die Elemente bleiben an ihren Positionen, Nummer/Name/Verknüpfung
+  // wechseln — da Positionen je Element für alle Frames gelten, ist der
+  // Tausch automatisch in jedem Frame wirksam.
+  const SWAP_FIELDS = ['rosterId', 'label', 'subLabel', 'subLabelSource', 'isGoalkeeper', 'placeholder', 'templateRole'];
+  function swapPlayerIdentities(a, b) {
+    SWAP_FIELDS.forEach((f) => {
+      const va = a[f], vb = b[f];
+      if (vb === undefined) delete a[f]; else a[f] = vb;
+      if (va === undefined) delete b[f]; else b[f] = va;
+    });
+    selectElement(b.id);
+    rebuildFramesList();
+    rebuildLayersList();
+    render();
+  }
 
   function removeElementById(id) {
     state.elements = state.elements.filter((e) => e.id !== id);
@@ -6120,6 +6159,23 @@
 
   function deleteSelected() {
     if (!state.selectedId) return;
+    const selEl = state.elements.find((e) => e.id === state.selectedId);
+    if (selEl && selEl.type === 'player' && selEl.slotPlaceholder && selEl.rosterId) {
+      // Besetzter Platzhalter: nicht entfernen, sondern zurück zum
+      // Platzhalter (Position bleibt). Die Spielerin ist danach in der
+      // Kader-Karte wieder auswählbar.
+      delete selEl.rosterId;
+      delete selEl.isGoalkeeper;
+      delete selEl.subLabelSource;
+      selEl.placeholder = true;
+      selEl.label = '?';
+      selEl.subLabel = selEl.templateRole ? (STANDARD_ROLE_LABELS[selEl.templateRole] || '') : '';
+      updateInspector();
+      rebuildFramesList();
+      rebuildLayersList();
+      render();
+      return;
+    }
     removeElementById(state.selectedId);
     updateInspector();
     rebuildFramesList();
@@ -7043,6 +7099,11 @@
   }
 
   function rebuildLayersList() {
+    // Die Kader-Karte graut Spielerinnen aus, die schon in der Taktik sind —
+    // rebuildLayersList läuft bei jeder Änderung der Elemente (Hinzufügen,
+    // Löschen, Besetzen, Laden, Undo/Redo) und ist daher der zentrale Anlass
+    // zum Neuzeichnen.
+    renderRosterQuickList();
     layersList.innerHTML = '';
     if (state.elements.length === 0) {
       const hint = document.createElement('div');
@@ -7087,6 +7148,7 @@
      ============================================================ */
 
   let dragging = null;
+  let dragStartPos = null; // Position des gezogenen Icons beim Start (für den Tausch Icon-auf-Icon)
   let dragOffset = null; // { x, y } percent offset between click point and anchor, polygon/line body-drag only
   let resizeDragging = null; // { elId }
   let rotateDragging = null; // { elId }
@@ -7121,7 +7183,7 @@
     };
   }
 
-  function hitTest(clientX, clientY) {
+  function hitTest(clientX, clientY, excludeId) {
     const frame = state.frames[state.currentFrame];
     if (!frame) return null;
     const p = eventToInternalPx(clientX, clientY);
@@ -7131,6 +7193,7 @@
     let best = null, bestD = Infinity;
     for (let i = state.elements.length - 1; i >= 0; i--) {
       const el = state.elements[i];
+      if (excludeId && el.id === excludeId) continue;
       const pos = frame.pos[el.id];
       if (!pos) continue;
       const mx = (pos.x / 100) * PITCH_LENGTH, my = (pos.y / 100) * PITCH_WIDTH;
@@ -7340,6 +7403,8 @@
     const hit = hitTest(e.clientX, e.clientY);
     if (hit) {
       dragging = hit;
+      const startFrame = state.frames[state.currentFrame];
+      dragStartPos = startFrame && startFrame.pos[hit] ? { ...startFrame.pos[hit] } : null;
       // Polygon/line hit-testing accepts a click anywhere on the outline
       // (or interior, for a polygon) — not just right on the anchor — so
       // a plain "teleport the anchor to the cursor" drag (as markers/
@@ -7505,8 +7570,27 @@
     refreshAllThumbs();
   });
 
-  function endDrag() {
-    if (dragging) { dragging = null; dragOffset = null; refreshFrameThumb(state.currentFrame); }
+  function endDrag(e) {
+    if (dragging) {
+      const draggedEl = state.elements.find((x) => x.id === dragging);
+      const startPos = dragStartPos;
+      dragStartPos = null;
+      // Spielericon auf ein anderes eigenes Spielericon losgelassen: die
+      // beiden tauschen ihre Spielerinnen, das gezogene Icon springt auf
+      // seine Ausgangsposition zurück.
+      if (draggedEl && draggedEl.type === 'player' && draggedEl.team === 'A' && e && e.type === 'pointerup') {
+        const targetId = hitTest(e.clientX, e.clientY, draggedEl.id);
+        const targetEl = targetId ? state.elements.find((x) => x.id === targetId) : null;
+        if (targetEl && targetEl.type === 'player' && targetEl.team === 'A') {
+          const frame = state.frames[state.currentFrame];
+          if (frame && startPos) frame.pos[draggedEl.id] = startPos;
+          dragging = null; dragOffset = null;
+          swapPlayerIdentities(draggedEl, targetEl);
+          return;
+        }
+      }
+      dragging = null; dragOffset = null; refreshFrameThumb(state.currentFrame);
+    }
     if (resizeDragging) { resizeDragging = null; refreshFrameThumb(state.currentFrame); }
     if (rotateDragging) { rotateDragging = null; refreshFrameThumb(state.currentFrame); }
     if (curveDragging) { curveDragging = null; refreshAllThumbs(); }
@@ -8721,7 +8805,7 @@
         if (!el.label) el.label = '?';
         return;
       }
-      delete el.templateRole;
+      el.slotPlaceholder = true;
       delete el.placeholder;
       el.rosterId = chosen.id;
       el.label = chosen.number != null ? String(chosen.number) : (chosen.initials || '');
