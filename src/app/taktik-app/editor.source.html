@@ -6066,7 +6066,9 @@
     if (!p) return;
     const hitId = hitTest(e.clientX, e.clientY);
     const hitEl = hitId ? state.elements.find((el) => el.id === hitId) : null;
-    if (hitEl && hitEl.type === 'player' && hitEl.placeholder) {
+    // Drop auf ein vorhandenes eigenes Spielericon (Platzhalter oder bereits
+    // besetzt): Nummer und Name der gezogenen Spielerin ersetzen die alten.
+    if (hitEl && hitEl.type === 'player' && hitEl.team === 'A') {
       fillPlaceholderWithRosterPlayer(hitEl, p);
       return;
     }
