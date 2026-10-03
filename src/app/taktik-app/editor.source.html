@@ -383,6 +383,10 @@
     flex-shrink: 0;
   }
   .add-btn .swatch-icon { flex-shrink: 0; display: block; }
+  .add-btn .swatch-placeholder {
+    background: transparent;
+    border: 1.5px dashed rgba(255,255,255,0.7);
+  }
 
   .hex-input {
     width: 82px;
@@ -1382,6 +1386,7 @@
           <div class="element-buttons">
             <button class="add-btn" id="addPlayerABtn" data-add="playerA"><span class="swatch" id="swatchA" style="background:#DB0000"></span> Spieler·in hinzufügen</button>
             <button class="add-btn" id="addGoalkeeperABtn" data-add="goalkeeperA"><span class="swatch" id="swatchAGk" style="background:#FFD400"></span> Torwart hinzufügen</button>
+            <button class="add-btn" id="addPlaceholderABtn" data-add="placeholderA" title="Leerer Platzhalter, der später per Drag &amp; Drop aus der Kaderliste mit einer Spieler:in besetzt wird — ideal für Vorlagen."><span class="swatch swatch-placeholder" id="swatchAPh"></span> Platzhalter hinzufügen</button>
           </div>
         </div>
         <div class="team-block" id="teamBBlock">
@@ -1486,7 +1491,7 @@
           </div>
           <div class="hidden" id="subLabelStyleControls">
             <label class="field">
-              <span>Schriftgröße: <span id="subLabelFontSizeValue">12</span>px</span>
+              <span>Schriftgröße: <span id="subLabelFontSizeValue">16</span>px</span>
               <input type="range" id="subLabelFontSizeInput" min="8" max="24" step="1">
             </label>
             <div class="field">
@@ -2970,11 +2975,24 @@
     // automatische Torwart-Farbe, siehe addRosterPlayerToField, oder eine
     // manuelle Wahl im Inspector) — ohne Override bleibt es wie bisher die
     // Teamfarbe.
-    ctx.fillStyle = resolvePlayerFillColor(el, teamColors);
-    ctx.fill();
+    if (el.placeholder) {
+      // Platzhalter: halbtransparent mit gestricheltem Rand, damit sofort
+      // erkennbar ist, dass hier noch eine Spieler:in per Drag & Drop
+      // hingehört.
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = resolvePlayerFillColor(el, teamColors);
+      ctx.fill();
+      ctx.restore();
+      ctx.setLineDash([r * 0.45, r * 0.35]);
+    } else {
+      ctx.fillStyle = resolvePlayerFillColor(el, teamColors);
+      ctx.fill();
+    }
     ctx.lineWidth = Math.max(1.2 / scale, r * 0.14);
     ctx.strokeStyle = el.borderColor || COLORS.line;
     ctx.stroke();
+    if (el.placeholder) ctx.setLineDash([]);
 
     if (isSelected) drawSelectionRing(ctx, mx, my, r * 1.55, scale);
   }
@@ -3029,11 +3047,11 @@
     // el.subLabelBgColor), an die tatsächliche Textbreite angepasst.
     if (el.type === 'player' && el.subLabel) {
       // el.subLabelFontSize ist die vom Inspector wählbare Schriftgröße
-      // in "px" (Standard 12, siehe subLabelFontSizeInput) — als Faktor
-      // relativ zu diesem Standard auf die bisherige, mit view.scale
+      // in "px" (Standard 16, siehe subLabelFontSizeInput) — als Faktor
+      // relativ zur ursprünglichen 12px-Basis auf die bisherige, mit view.scale
       // mitskalierende Weltgrößen-Formel angewendet, damit sich an der
       // bestehenden Zoom-/Export-Logik nichts ändert.
-      const fontSizeFactor = (el.subLabelFontSize != null ? el.subLabelFontSize : 12) / 12;
+      const fontSizeFactor = (el.subLabelFontSize != null ? el.subLabelFontSize : 16) / 12;
       const subFontPx = Math.max(6, PLAYER_R_M * 0.62 * fontSizeFactor * view.scale);
       const subDy = PLAYER_R_M * 1.55 * view.scale;
       ctx.font = `600 ${subFontPx}px Manrope, sans-serif`;
@@ -5861,8 +5879,13 @@
   function addFrame() {
     const base = state.frames[state.currentFrame] || state.frames[state.frames.length - 1];
     const newPos = {};
+    // Ein Element, das im Basis-Frame noch keine Position hat, wurde erst
+    // auf einem späteren Frame hinzugefügt und existiert an dieser Stelle
+    // der Timeline noch nicht — dann bekommt auch das neue (duplizierte)
+    // Frame keine Position dafür, statt es mit einem Default-Punkt
+    // künstlich vorzuziehen (siehe addElement/addRosterPlayerToField).
     for (const el of state.elements) {
-      newPos[el.id] = base && base.pos[el.id] ? { ...base.pos[el.id] } : { x: 50, y: 50 };
+      if (base && base.pos[el.id]) newPos[el.id] = { ...base.pos[el.id] };
     }
     const frame = { id: uid('f'), holdMs: 1000, transitionMs: 1000, pos: newPos };
     state.frames.push(frame);
@@ -5887,7 +5910,7 @@
      Elements: add / select / delete / label / marker style
      ============================================================ */
 
-  function addElement(type, team, shape, isGoalkeeper) {
+  function addElement(type, team, shape, isGoalkeeper, isPlaceholder) {
     if (type === 'ball' && state.elements.some((e) => e.type === 'ball')) {
       selectElement(state.elements.find((e) => e.type === 'ball').id);
       return;
@@ -5900,6 +5923,13 @@
     }
     const el = { id, type, team: team || null, label };
     if (type === 'player' && isGoalkeeper) el.isGoalkeeper = true;
+    if (type === 'player' && isPlaceholder) {
+      // Platzhalter: bleibt in allen Frames an seiner Position und wird
+      // später per Drag & Drop aus der Kaderliste besetzt (siehe
+      // fillPlaceholderWithRosterPlayer).
+      el.placeholder = true;
+      el.label = '?';
+    }
     if (type === 'marker') {
       el.shape = shape || 'circle';
       el.w = MARKER_DEFAULT_M;
@@ -5935,7 +5965,14 @@
     const n = state.elements.length;
     const defX = clamp(cropCenterPercent + ((n % 5) - 2) * 5, cropMinPercent + 3, cropMaxPercent - 3);
     const defY = clamp(50 + ((Math.floor(n / 5) % 3) - 1) * 12, 6, 94);
-    for (const frame of state.frames) frame.pos[id] = { x: defX, y: defY };
+    // Nur ab dem aktuell angezeigten Frame platzieren — auf früheren
+    // Frames existierte dieses Element noch nicht und soll dort auch
+    // nicht rückwirkend auftauchen (paintScene/interpPositions
+    // behandeln ein fehlendes frame.pos[id] bereits korrekt als
+    // "noch nicht vorhanden").
+    state.frames.forEach((frame, idx) => {
+      if (idx >= state.currentFrame) frame.pos[id] = { x: defX, y: defY };
+    });
 
     selectElement(id);
     rebuildFramesList();
@@ -5978,7 +6015,10 @@
     // Inspector überschreibbar (siehe playerControls/playerFillInput).
     if (p.position1 === 'TW' || p.position2 === 'TW') el.isGoalkeeper = true;
     state.elements.push(el);
-    for (const frame of state.frames) frame.pos[id] = { ...pct };
+    // Nur ab dem aktuell angezeigten Frame platzieren, siehe addElement().
+    state.frames.forEach((frame, idx) => {
+      if (idx >= state.currentFrame) frame.pos[id] = { ...pct };
+    });
     selectElement(id);
     rebuildFramesList();
     rebuildLayersList();
@@ -5990,12 +6030,37 @@
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   });
+  // Besetzt einen Platzhalter mit einer Kaderspieler:in. Das Element ist
+  // über alle Frames hinweg dasselbe (nur die Position je Frame
+  // unterscheidet sich) — damit ist die Spielerin automatisch in jedem
+  // Frame an der jeweiligen Position.
+  function fillPlaceholderWithRosterPlayer(el, p) {
+    delete el.placeholder;
+    delete el.templateRole;
+    el.rosterId = p.id;
+    el.label = p.number == null ? '' : String(p.number);
+    el.subLabel = subLabelForRosterPlayer(p);
+    el.subLabelSource = subLabelMode;
+    if (p.position1 === 'TW' || p.position2 === 'TW') el.isGoalkeeper = true;
+    else delete el.isGoalkeeper;
+    selectElement(el.id);
+    rebuildFramesList();
+    rebuildLayersList();
+    render();
+  }
+
   canvas.addEventListener('drop', (e) => {
     e.preventDefault();
     if (state.playing || drawingMode) return;
     const rosterId = e.dataTransfer.getData('text/plain');
     const p = roster.find((r) => r.id === rosterId);
     if (!p) return;
+    const hitId = hitTest(e.clientX, e.clientY);
+    const hitEl = hitId ? state.elements.find((el) => el.id === hitId) : null;
+    if (hitEl && hitEl.type === 'player' && hitEl.placeholder) {
+      fillPlaceholderWithRosterPlayer(hitEl, p);
+      return;
+    }
     addRosterPlayerToField(p, clientToPercent(e.clientX, e.clientY));
   });
 
@@ -6284,7 +6349,7 @@
       subLabelField.classList.remove('hidden');
       subLabelInput.value = el.subLabel || '';
       subLabelStyleControls.classList.remove('hidden');
-      const sFontSize = el.subLabelFontSize != null ? el.subLabelFontSize : 12;
+      const sFontSize = el.subLabelFontSize != null ? el.subLabelFontSize : 16;
       subLabelFontSizeInput.value = sFontSize;
       subLabelFontSizeValue.textContent = String(sFontSize);
       updateRangeFill(subLabelFontSizeInput);
@@ -6406,6 +6471,7 @@
       else if (type === 'playerB') addElement('player', 'B');
       else if (type === 'goalkeeperA') addElement('player', 'A', null, true);
       else if (type === 'goalkeeperB') addElement('player', 'B', null, true);
+      else if (type === 'placeholderA') addElement('player', 'A', null, false, true);
     });
   });
 
@@ -6435,6 +6501,12 @@
     if (!el || el.type !== 'player') return;
     if (playerRoleSelect.value) el.templateRole = playerRoleSelect.value;
     else delete el.templateRole;
+    // Ein noch unbesetzter Platzhalter zeigt seine Rolle als Untertext, bis
+    // eine Spieler:in darauf gezogen wird.
+    if (el.placeholder) {
+      el.subLabel = el.templateRole ? (STANDARD_ROLE_LABELS[el.templateRole] || '') : '';
+      subLabelInput.value = el.subLabel;
+    }
     render();
     refreshFrameThumb(state.currentFrame);
   });
@@ -8507,14 +8579,38 @@
   async function applyTemplateToLibrary(id) {
     const source = library.find((e) => e.id === id);
     if (!source) return;
-    const roleElements = (source.elements || []).filter((el) => el.type === 'player' && el.templateRole);
-    if (roleElements.length === 0) {
-      libraryStatus.textContent = 'Diese Vorlage enthält keine Rollen-Zuweisungen.';
+    // Platzhalter = Spieler-Elemente ohne Kader-Verknüpfung, die als
+    // Platzhalter markiert sind oder eine Standard-Rolle tragen.
+    const placeholderElements = (source.elements || []).filter(
+      (el) => el.type === 'player' && !el.rosterId && (el.placeholder || el.templateRole)
+    );
+    if (placeholderElements.length === 0) {
+      libraryStatus.textContent = 'Diese Vorlage enthält keine Platzhalter.';
       return;
     }
-    const slots = roleElements.map((el) => ({ elementId: el.id, roleKey: el.templateRole }));
-    const assignment = await openRoleAssignmentModal(slots);
-    if (!assignment) return;
+    // Hat die Vorlage Rollen und gibt es eine Startelf, kann man die
+    // Platzhalter automatisch nach Attributen besetzen lassen — sonst (oder
+    // auf Wunsch) werden sie per Drag & Drop aus der Kaderliste besetzt.
+    const roleElements = placeholderElements.filter((el) => el.templateRole);
+    let slots = [];
+    let assignment = [];
+    if (roleElements.length > 0 && roster.some((p) => p.starting)) {
+      const mode = await chooseModal({
+        title: 'Vorlage anwenden',
+        text: 'Wie sollen die Platzhalter besetzt werden?',
+        options: [
+          { label: 'Automatisch nach Attributen besetzen', value: 'auto' },
+          { label: 'Selbst per Drag & Drop besetzen', value: 'manual' },
+        ],
+        cancelLabel: 'Abbrechen',
+      });
+      if (!mode) return;
+      if (mode === 'auto') {
+        slots = roleElements.map((el) => ({ elementId: el.id, roleKey: el.templateRole }));
+        assignment = await openRoleAssignmentModal(slots);
+        if (!assignment) return;
+      }
+    }
 
     const copy = JSON.parse(JSON.stringify(source));
     copy.id = genId();
@@ -8524,24 +8620,34 @@
     copy.matchId = state.activeMatchId || null;
 
     copy.elements.forEach((el) => {
-      if (el.type !== 'player' || !el.templateRole) return;
+      if (el.type !== 'player' || el.rosterId || !(el.placeholder || el.templateRole)) return;
       const slotIndex = slots.findIndex((s) => s.elementId === el.id);
       const chosen = slotIndex >= 0 ? assignment[slotIndex] : null;
+      if (!chosen) {
+        // Bleibt ein Platzhalter, der per Drag & Drop besetzt wird.
+        el.placeholder = true;
+        if (!el.label) el.label = '?';
+        return;
+      }
       delete el.templateRole;
-      if (!chosen) return;
+      delete el.placeholder;
       el.rosterId = chosen.id;
       el.label = chosen.number != null ? String(chosen.number) : (chosen.initials || '');
-      el.subLabel = `${chosen.firstName || ''} ${chosen.lastName || ''}`.trim();
-      el.subLabelSource = 'fullName';
-      el.isGoalkeeper = chosen.position1 === 'TW' || chosen.position2 === 'TW';
+      el.subLabel = subLabelForRosterPlayer(chosen);
+      el.subLabelSource = subLabelMode;
+      if (chosen.position1 === 'TW' || chosen.position2 === 'TW') el.isGoalkeeper = true;
+      else delete el.isGoalkeeper;
     });
 
     library.push(copy);
     const ok = persistLibrary();
-    libraryStatus.textContent = ok ? `„${copy.name}“ aus Vorlage erstellt.` : 'Anwenden fehlgeschlagen — Speicher evtl. voll.';
+    const openPlaceholders = copy.elements.some((el) => el.placeholder);
     renderFolderMenu();
     renderLibraryList();
     if (ok) await loadFromLibrary(copy.id);
+    libraryStatus.textContent = !ok ? 'Anwenden fehlgeschlagen — Speicher evtl. voll.'
+      : openPlaceholders ? `„${copy.name}“ erstellt — Spieler:innen jetzt aus der Kaderliste auf die Platzhalter ziehen.`
+      : `„${copy.name}“ aus Vorlage erstellt.`;
   }
 
   /* ============================================================
