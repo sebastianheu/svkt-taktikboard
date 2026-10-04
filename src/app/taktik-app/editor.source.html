@@ -295,6 +295,31 @@
     .rail { position: static; }
   }
 
+  /* Desktop: die Seite selbst scrollt nicht — die beiden Bearbeitungs-
+     menüs links und rechts scrollen jeweils für sich, das Taktikfeld in
+     der Mitte bleibt dauerhaft sichtbar (z. B. zum Platzieren von
+     Spielerinnen per Drag & Drop, während man weiter unten im Menü ist). */
+  @media (min-width: 981px) {
+    .app { height: 100vh; }
+    .workspace {
+      min-height: 0;
+      overflow: hidden;
+      align-items: stretch;
+      grid-template-rows: minmax(0, 1fr);
+      padding-bottom: 16px;
+    }
+    .rail {
+      position: static;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
+    .rail > * { flex-shrink: 0; }
+    .stage { min-height: 0; overflow-y: auto; }
+    .team-view { min-height: 0; overflow-y: auto; }
+  }
+
   .panel {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -6180,7 +6205,7 @@
   function deleteSelected() {
     if (!state.selectedId) return;
     const selEl = state.elements.find((e) => e.id === state.selectedId);
-    if (selEl && selEl.type === 'player' && selEl.slotPlaceholder && selEl.rosterId) {
+    if (selEl && selEl.type === 'player' && selEl.slotPlaceholder && !selEl.placeholder) {
       // Besetzter Platzhalter: nicht entfernen, sondern zurück zum
       // Platzhalter (Position bleibt). Die Spielerin ist danach in der
       // Kader-Karte wieder auswählbar.
@@ -8814,6 +8839,13 @@
     copy.savedAt = Date.now();
     copy.isTemplate = false;
     copy.matchId = state.activeMatchId || null;
+
+    // Jede eigene Spieler:in der Vorlage ist ein Platz der Vorlage: wird sie
+    // in der Kopie gelöscht, kommt an dieser Stelle wieder ein Platzhalter
+    // (damit die Laufwege erhalten bleiben), siehe deleteSelected.
+    copy.elements.forEach((el) => {
+      if (el.type === 'player' && el.team === 'A') el.slotPlaceholder = true;
+    });
 
     copy.elements.forEach((el) => {
       if (el.type !== 'player' || el.rosterId || !(el.placeholder || el.templateRole)) return;
