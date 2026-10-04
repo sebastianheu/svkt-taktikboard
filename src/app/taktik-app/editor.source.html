@@ -5929,10 +5929,30 @@
     const cropMinPercent = (crop.xMin / PITCH_LENGTH) * 100;
     const cropMaxPercent = (crop.xMax / PITCH_LENGTH) * 100;
     const n = state.elements.length;
-    return {
+    const preferred = {
       x: clamp(cropCenterPercent + ((n % 5) - 2) * 5, cropMinPercent + 3, cropMaxPercent - 3),
       y: clamp(50 + ((Math.floor(n / 5) % 3) - 1) * 12, 6, 94),
     };
+    // Kollisionsfrei: ein neues Icon darf in keinem Frame auf einem
+    // vorhandenen liegen (sonst verdeckt es dort eine andere Spielerin).
+    // Bevorzugt die Rasterposition, sonst der nächstgelegene freie Punkt.
+    const occupied = [];
+    state.elements.forEach((el) => {
+      if (el.type !== 'player' && el.type !== 'marker' && el.type !== 'ball') return;
+      state.frames.forEach((f) => { if (f.pos[el.id]) occupied.push(posToMeters(f.pos[el.id])); });
+    });
+    const isFree = (pt) => {
+      const m = posToMeters(pt);
+      return occupied.every((o) => Math.hypot(o.x - m.x, o.y - m.y) > 3.2);
+    };
+    if (isFree(preferred)) return preferred;
+    const candidates = [];
+    for (let x = cropMinPercent + 4; x <= cropMaxPercent - 4; x += 4) {
+      for (let y = 8; y <= 92; y += 7) candidates.push({ x, y });
+    }
+    candidates.sort((a, b) =>
+      Math.hypot(a.x - preferred.x, a.y - preferred.y) - Math.hypot(b.x - preferred.x, b.y - preferred.y));
+    return candidates.find(isFree) || preferred;
   }
 
   function addElement(type, team, shape, isGoalkeeper, isPlaceholder) {
