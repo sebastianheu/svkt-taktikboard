@@ -1,22 +1,27 @@
-import { NextResponse } from "next/server";
-import { getVercelOidcToken } from "@vercel/oidc";
+import { NextRequest, NextResponse } from "next/server";
+import { put, del } from "@vercel/blob";
 
-// Temporaere Diagnose (Session-geschuetzt): zeigt, ob OIDC fuer den Blob-Store
-// in der Function verfuegbar ist. Wird nach der Einrichtung wieder entfernt.
-export async function GET() {
-  let oidc = "ok";
+// Temporaere Diagnose (Session-geschuetzt), wird nach dem Test entfernt:
+// prueft serverseitig put() und del() ueber OIDC und raeumt eine Test-Datei.
+export async function POST(request: NextRequest) {
+  const { deleteUrl } = await request.json().catch(() => ({}));
+  const out: Record<string, unknown> = {};
   try {
-    const t = await getVercelOidcToken();
-    oidc = t ? `ok (Laenge ${t.length})` : "leer";
+    const gif = Buffer.from("R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=", "base64");
+    const blob = await put("gifs/server-test.gif", gif, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: "image/gif",
+    });
+    out.put = blob.url;
+    await del(blob.url);
+    out.delServerTest = "ok";
+    if (typeof deleteUrl === "string" && /\/gifs\/test-upload-[A-Za-z0-9]+\.gif$/.test(deleteUrl)) {
+      await del(deleteUrl);
+      out.delClientTest = "ok";
+    }
   } catch (e) {
-    oidc = "FEHLER: " + (e instanceof Error ? e.message : String(e));
+    out.error = e instanceof Error ? e.message : String(e);
   }
-  return NextResponse.json({
-    BLOB_STORE_ID: process.env.BLOB_STORE_ID ?? null,
-    hatBlobReadWriteToken: !!process.env.BLOB_READ_WRITE_TOKEN,
-    hatVercelOidcTokenEnv: !!process.env.VERCEL_OIDC_TOKEN,
-    hatWebhookKey: !!process.env.BLOB_WEBHOOK_PUBLIC_KEY,
-    vercelEnv: process.env.VERCEL_ENV ?? null,
-    oidc,
-  });
+  return NextResponse.json(out);
 }
