@@ -24,6 +24,8 @@ async function loadAffected() {
 export async function GET() {
   const { rows } = await loadAffected();
   return NextResponse.json({
+    hinweis: "Die Migration aendert ausschliesslich das Feld gif; Vorlagen (isTemplate), Elemente und Frames bleiben unveraendert.",
+    vorlagenInBetroffenen: rows.filter((r) => (r.data as { isTemplate?: boolean }).isTemplate).length,
     betroffeneEintraege: rows.length,
     ungefaehreGroesseMB: +(
       rows.reduce((sum, r) => sum + String(r.data.gif?.dataUrl ?? "").length, 0) /
@@ -60,13 +62,14 @@ export async function POST(request: NextRequest) {
       });
       const { dataUrl: _removed, ...restGif } = row.data.gif ?? {};
       void _removed;
-      const newData = {
-        ...row.data,
-        gif: { ...restGif, url: blob.url, pathname: blob.pathname, bytes: buffer.length },
-      };
+      const newGif = { ...restGif, url: blob.url, pathname: blob.pathname, bytes: buffer.length };
+      // Nur das Feld "gif" ersetzen (jsonb_set): alle anderen Felder des
+      // Eintrags (Elemente, Frames, isTemplate, ...) bleiben unangetastet,
+      // auch wenn der Eintrag zwischenzeitlich bearbeitet wurde.
       await sql`
-        UPDATE library_entries SET data = ${JSON.stringify(newData)}::jsonb, updated_at = now()
-        WHERE id = ${row.id}
+        UPDATE library_entries
+        SET data = jsonb_set(data, '{gif}', ${JSON.stringify(newGif)}::jsonb), updated_at = now()
+        WHERE id = ${row.id} AND data->'gif'->>'dataUrl' IS NOT NULL
       `;
       results.push({ id: row.id, ok: true, url: blob.url });
     } catch (e) {

@@ -850,6 +850,8 @@
     vertical-align: middle;
   }
 
+  .lib-backup-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+
   .match-scope-banner {
     display: flex;
     align-items: center;
@@ -1847,6 +1849,11 @@
         <div id="libraryStatus" class="hint" style="margin:0 0 8px;"></div>
         <div class="folder-menu" id="folderMenu"></div>
         <div id="libraryList" class="lib-list"></div>
+        <div class="lib-backup-row">
+          <button type="button" class="btn btn-ghost btn-sm" id="exportTemplatesBtn" title="Alle Vorlagen als Sicherungsdatei (.json) herunterladen">Vorlagen sichern</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="importLibraryBtn" title="Taktiken/Vorlagen aus einer Sicherungsdatei (.json) wieder hinzufügen — vorhandene bleiben unverändert">Importieren</button>
+          <input type="file" id="importLibraryFile" accept=".json,application/json" class="hidden">
+        </div>
         <div class="hint">Taktik und Frames werden automatisch gespeichert und sind auf all deinen Geräten verfügbar.</div>
       </section>
       <section class="panel frames-panel">
@@ -8609,8 +8616,10 @@
       delBtn.setAttribute('aria-label', 'Eintrag löschen');
       delBtn.addEventListener('click', async () => {
         const confirmed = await confirmModal({
-          title: 'GIF löschen?',
-          text: `„${entry.name}“ wird endgültig aus der Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`,
+          title: entry.isTemplate ? 'VORLAGE löschen?' : 'GIF löschen?',
+          text: entry.isTemplate
+            ? `„${entry.name}“ ist eine VORLAGE und wird endgültig gelöscht — inklusive aller Platzhalter und Frames. Das lässt sich nicht rückgängig machen. Tipp: vorher mit „Vorlagen sichern“ eine Sicherungsdatei herunterladen.`
+            : `„${entry.name}“ wird endgültig aus der Bibliothek gelöscht. Das lässt sich nicht rückgängig machen.`,
           confirmLabel: 'Löschen',
           cancelLabel: 'Abbrechen',
         });
@@ -8690,6 +8699,56 @@
     renderFolderMenu();
     renderLibraryList();
   }
+
+  /* ============================================================
+     Sicherung/Wiederherstellung: Vorlagen als .json-Datei herunterladen
+     und (z. B. nach einem Fehler) wieder hinzufügen. Der Import akzeptiert
+     auch die komplette Bibliothek ({entries:[…]} oder ein Array) und lässt
+     bereits vorhandene Einträge (gleiche ID) unverändert.
+     ============================================================ */
+
+  const exportTemplatesBtn = document.getElementById('exportTemplatesBtn');
+  const importLibraryBtn = document.getElementById('importLibraryBtn');
+  const importLibraryFile = document.getElementById('importLibraryFile');
+
+  exportTemplatesBtn.addEventListener('click', () => {
+    const templates = library.filter((e) => e.isTemplate);
+    if (templates.length === 0) {
+      libraryStatus.textContent = 'Es gibt noch keine Vorlagen zum Sichern.';
+      return;
+    }
+    const json = JSON.stringify({ exportedAt: new Date().toISOString(), entries: templates });
+    const day = new Date().toISOString().slice(0, 10);
+    saveBlobToDevice(`vorlagen-sicherung-${day}.json`, new Blob([json], { type: 'application/json' }));
+    libraryStatus.textContent = `${templates.length} Vorlage(n) gesichert.`;
+  });
+
+  importLibraryBtn.addEventListener('click', () => importLibraryFile.click());
+  importLibraryFile.addEventListener('change', async () => {
+    const file = importLibraryFile.files && importLibraryFile.files[0];
+    importLibraryFile.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const entries = Array.isArray(data) ? data : data && data.entries;
+      if (!Array.isArray(entries)) throw new Error('Keine Bibliotheksdatei.');
+      const known = new Set(library.map((e) => e.id));
+      let added = 0, skipped = 0;
+      entries.forEach((e) => {
+        if (!e || typeof e.id !== 'string' || !Array.isArray(e.elements)) { skipped += 1; return; }
+        if (known.has(e.id)) { skipped += 1; return; }
+        library.push(e);
+        known.add(e.id);
+        added += 1;
+      });
+      persistLibrary();
+      renderFolderMenu();
+      renderLibraryList();
+      libraryStatus.textContent = `${added} importiert, ${skipped} übersprungen (bereits vorhanden/ungültig).`;
+    } catch (err) {
+      libraryStatus.textContent = 'Import fehlgeschlagen: ' + (err && err.message ? err.message : 'Datei nicht lesbar.');
+    }
+  });
 
   /* ============================================================
      Vorlagen (Templates) — eine Vorlage ist eine ganz normale Taktik
