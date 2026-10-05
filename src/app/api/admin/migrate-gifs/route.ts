@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return NextResponse.json({ error: "BLOB_READ_WRITE_TOKEN ist nicht gesetzt." }, { status: 500 });
+  if (!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID)) {
+    return NextResponse.json({ error: "Blob-Store nicht konfiguriert (BLOB_STORE_ID oder BLOB_READ_WRITE_TOKEN fehlt)." }, { status: 500 });
   }
   const { sql, rows } = await loadAffected();
   const results: { id: string; ok: boolean; url?: string; error?: string }[] = [];

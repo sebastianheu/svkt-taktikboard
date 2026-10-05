@@ -5,7 +5,7 @@ import { build } from "esbuild";
 import { writeFileSync, mkdirSync } from "node:fs";
 
 mkdirSync("public/vendor", { recursive: true });
-writeFileSync("scripts/.blob-client-entry.mjs", `import { upload } from "@vercel/blob/client";\nwindow.VercelBlobClient = { upload };\n`);
+writeFileSync("scripts/.blob-client-entry.mjs", `import { uploadPresigned } from "@vercel/blob/client";\nwindow.VercelBlobClient = { upload: uploadPresigned };\n`);
 await build({
   entryPoints: ["scripts/.blob-client-entry.mjs"],
   bundle: true,

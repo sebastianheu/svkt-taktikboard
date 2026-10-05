@@ -4,7 +4,7 @@ import { del } from "@vercel/blob";
 // Operation). Nur Blob-URLs und nur wenn der Store konfiguriert ist;
 // Fehler duerfen das Speichern/Loeschen eines Eintrags nie blockieren.
 export async function deleteBlobQuietly(url: unknown): Promise<void> {
-  if (typeof url !== "string" || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  if (typeof url !== "string" || !(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID)) return;
   if (!/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i.test(url)) return;
   try {
     await del(url);
