@@ -2022,6 +2022,7 @@
   </div>
 </div>
 
+<script src="/vendor/vercel-blob-client.js"></script>
 <script>
 (function () {
   'use strict';
@@ -8241,10 +8242,11 @@
             it.title = `${entry.name} — klicken zum Laden, ziehen zum Verschieben in einen anderen Ordner`;
             it.dataset.entryId = entry.id;
             it.dataset.folderId = id;
-            if (entry.gif && entry.gif.dataUrl) {
+            if (gifSrc(entry.gif)) {
               const thumb = document.createElement('img');
               thumb.className = 'folder-sub-thumb';
-              thumb.src = entry.gif.dataUrl;
+              thumb.loading = 'lazy';
+              thumb.src = gifSrc(entry.gif);
               thumb.alt = '';
               it.appendChild(thumb);
             }
@@ -8581,16 +8583,20 @@
         actions.appendChild(applyBtn);
       }
 
-      if (entry.gif && entry.gif.dataUrl) {
+      if (gifSrc(entry.gif)) {
         const dlBtn = document.createElement('button');
         dlBtn.type = 'button';
         dlBtn.className = 'icon-btn';
         dlBtn.innerHTML = ICON_DOWNLOAD;
         dlBtn.title = 'GIF herunterladen';
         dlBtn.setAttribute('aria-label', 'GIF herunterladen');
-        dlBtn.addEventListener('click', () => {
-          saveBlobToDevice(`${slugify(entry.name)}.gif`, dataUrlToBlob(entry.gif.dataUrl));
-          libraryStatus.textContent = 'GIF heruntergeladen.';
+        dlBtn.addEventListener('click', async () => {
+          try {
+            saveBlobToDevice(`${slugify(entry.name)}.gif`, await gifToBlob(entry.gif));
+            libraryStatus.textContent = 'GIF heruntergeladen.';
+          } catch (err) {
+            libraryStatus.textContent = 'GIF konnte nicht heruntergeladen werden.';
+          }
         });
         actions.appendChild(dlBtn);
       }
@@ -8616,10 +8622,11 @@
       meta.append(nameEl, dateEl, actions);
       card.append(meta);
 
-      if (entry.gif && entry.gif.dataUrl) {
+      if (gifSrc(entry.gif)) {
         const img = document.createElement('img');
         img.className = 'lib-gif lib-clickable';
-        img.src = entry.gif.dataUrl;
+        img.loading = 'lazy';
+        img.src = gifSrc(entry.gif);
         img.alt = `GIF-Vorschau: ${entry.name}`;
         img.title = 'Klicken zum Laden';
         img.addEventListener('click', () => loadFromLibrary(entry.id));
@@ -8974,17 +8981,68 @@
     if (state.elements.length === 0) return;
     const entry = state.activeLibraryId ? library.find((e) => e.id === state.activeLibraryId) : null;
     if (!entry) return;
+    // Nur neu erzeugen/hochladen, wenn sich die Taktik seit der letzten
+    // GIF-Vorschau tatsächlich geändert hat (spart Rechenzeit, Datentransfer
+    // und Blob-Operationen).
+    const sourceHash = gifSourceHash(entry);
+    if (entry.gif && entry.gif.sourceHash === sourceHash) return;
     const result = await renderAndEncodeGif({ silent: true });
     if (!result) return;
     try {
-      const dataUrl = await blobToDataUrl(result.blob);
-      entry.gif = { dataUrl, bytes: result.bytes.length, frameCount: result.frameCount, savedAt: Date.now() };
+      if (!window.VercelBlobClient) throw new Error('Blob-Client nicht geladen');
+      // Direkt vom Browser in den Blob-Store (Client Upload): die GIF-Daten
+      // laufen nicht über die eigene App/Function. Die Route
+      // /api/blob/upload stellt nur ein kurzlebiges Token aus (nach
+      // Session-Prüfung). Das Alt-GIF löscht der Server beim Speichern des
+      // Eintrags (siehe /api/library/[id]).
+      const uploaded = await window.VercelBlobClient.upload(`gifs/${entry.id}.gif`, result.blob, {
+        access: 'public',
+        handleUploadUrl: '/api/blob/upload',
+        contentType: 'image/gif',
+      });
+      entry.gif = {
+        url: uploaded.url,
+        pathname: uploaded.pathname,
+        bytes: result.bytes.length,
+        frameCount: result.frameCount,
+        savedAt: Date.now(),
+        sourceHash,
+      };
       persistLibrary();
       renderLibraryList();
     } catch (err) {
-      // Stilles Scheitern — Auto-Save darf die laufende Bearbeitung nicht
-      // mit einer Fehlermeldung unterbrechen.
+      console.error('GIF-Vorschau konnte nicht hochgeladen werden', err);
+      libraryStatus.textContent = 'GIF-Vorschau konnte nicht gespeichert werden.';
     }
+  }
+
+  // Kurzer Prüfwert über den Inhalt einer Taktik (cyrb53), um zu erkennen,
+  // ob die gespeicherte GIF-Vorschau noch zur Taktik passt.
+  function gifSourceHash(entry) {
+    const str = JSON.stringify([entry.elements, entry.frames, entry.pitchPreset]);
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36) + '-' + str.length;
+  }
+
+  // GIF-Quelle eines Eintrags: Blob-URL (neu) oder Base64-Data-URL (alt,
+  // bis zur Migration).
+  function gifSrc(gif) {
+    return gif ? (gif.url || gif.dataUrl || null) : null;
+  }
+  async function gifToBlob(gif) {
+    if (gif.url) {
+      const res = await fetch(gif.url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.blob();
+    }
+    return dataUrlToBlob(gif.dataUrl);
   }
 
   /* ============================================================
