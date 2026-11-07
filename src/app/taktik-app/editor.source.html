@@ -2281,15 +2281,18 @@
     return { fontPx, lineHeight, lines, textW: maxW, textH: lineHeight * lines.length };
   }
 
-  // Half-width/height in METERS — dividing the measured pixel size by the
-  // view's pixels-per-meter scale is valid here because the view matrix is
-  // a pure rotation+uniform-scale (no shear/skew), so meters and pixels
-  // convert with one consistent factor in every direction.
+  // Half-extents in METERS (halfW = along meter-x, halfH = along meter-y).
+  // Dividing the measured pixel size by the view's pixels-per-meter scale is
+  // valid because the view matrix is a pure rotation+uniform-scale. Der
+  // Platz ist im Hochformat gedreht (siehe getView: screenX folgt meter-y,
+  // screenY folgt meter-x), der Text aber aufrecht gezeichnet: die
+  // Textbreite gehört daher auf die meter-y-Achse und die Texthöhe auf die
+  // meter-x-Achse -- sonst wäre der Kasten hochkant statt passend zum Text.
   function textBoxHalfExtents(el, scale) {
     const { textW, textH } = textBoxMetricsPx(el, scale);
     const wPx = textW + TEXTBOX_PAD_PX * 2;
     const hPx = textH + TEXTBOX_PAD_PX * 2;
-    return { halfW: (wPx / 2) / scale, halfH: (hPx / 2) / scale };
+    return { halfW: (hPx / 2) / scale, halfH: (wPx / 2) / scale };
   }
 
   const PITCH_PRESETS = [
