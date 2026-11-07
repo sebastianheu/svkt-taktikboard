@@ -8612,7 +8612,12 @@
 
   function renderLibraryList() {
     libraryList.innerHTML = '';
-    const visible = entriesInFolder(state.activeFolderId);
+    // Angezeigt wird nur das ausgewählte GIF (mit Vorschaubild und Aktionen),
+    // nicht mehr alle GIFs des Ordners — die Auswahl läuft über die Liste
+    // im Ordner-Menü darüber.
+    const visible = state.activeLibraryId
+      ? libraryScopePool().filter((e) => e.id === state.activeLibraryId)
+      : [];
     if (library.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'hint';
@@ -8623,7 +8628,7 @@
     if (visible.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'hint';
-      hint.textContent = 'Keine GIFs in diesem Ordner.';
+      hint.textContent = 'Kein GIF ausgewählt — im Ordner oben ein GIF anklicken, um Vorschau und Aktionen zu sehen.';
       libraryList.appendChild(hint);
       return;
     }
