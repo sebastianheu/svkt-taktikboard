@@ -570,6 +570,7 @@
   }
   .layer-row:active { cursor: grabbing; }
   .layer-row.selected { border-color: var(--accent); background: #24211a; }
+  .layer-row.layer-absent { opacity: 0.45; }
   .layer-row .layer-drag-handle {
     color: var(--text-faint);
     font-size: 13px;
@@ -1793,7 +1794,9 @@
             </label>
           </div>
           <hr class="inspector-divider">
-          <button id="deleteElBtn" class="btn btn-danger btn-block">Element löschen</button>
+          <button id="showElFrameBtn" class="btn btn-accent btn-block hidden" style="margin-bottom:8px;">In diesem Frame einblenden</button>
+          <button id="hideElFrameBtn" class="btn btn-ghost btn-block" style="margin-bottom:8px;" title="Das Element verschwindet nur in dem Frame, der gerade angezeigt wird; die anderen Frames bleiben unverändert.">Nur in diesem Frame entfernen</button>
+          <button id="deleteElBtn" class="btn btn-danger btn-block" title="Entfernt das Element aus allen Frames.">Element in allen Frames löschen</button>
         </div>
       </section>
     </aside>
@@ -3489,6 +3492,8 @@
   const drawingFinishBtn = document.getElementById('drawingFinishBtn');
   const drawingCancelBtn = document.getElementById('drawingCancelBtn');
   const deleteElBtn = document.getElementById('deleteElBtn');
+  const showElFrameBtn = document.getElementById('showElFrameBtn');
+  const hideElFrameBtn = document.getElementById('hideElFrameBtn');
   const layersList = document.getElementById('layersList');
   const layersToggleBtn = document.getElementById('layersToggleBtn');
   const layersPanelInline = document.getElementById('layersPanelInline');
@@ -5909,6 +5914,7 @@
       if (idx >= 0) state.currentFrame = idx;
     }
     rebuildFramesList();
+    rebuildLayersList();
     render();
   });
 
@@ -5917,6 +5923,7 @@
     state.selectedId = null;
     updateInspector();
     rebuildFramesList();
+    rebuildLayersList();
     render();
   }
 
@@ -5934,7 +5941,9 @@
     const frame = { id: uid('f'), holdMs: 1000, transitionMs: 1000, pos: newPos };
     state.frames.push(frame);
     state.currentFrame = state.frames.length - 1;
+    updateInspector();
     rebuildFramesList();
+    rebuildLayersList();
     render();
   }
 
@@ -5943,7 +5952,9 @@
     state.frames.splice(idx, 1);
     if (idx < state.currentFrame) state.currentFrame -= 1;
     state.currentFrame = clamp(state.currentFrame, 0, state.frames.length - 1);
+    updateInspector();
     rebuildFramesList();
+    rebuildLayersList();
     render();
   }
 
@@ -5953,6 +5964,43 @@
   /* ============================================================
      Elements: add / select / delete / label / marker style
      ============================================================ */
+
+  // Ein neues Element erscheint nur auf dem gerade angezeigten Frame — nicht
+  // rückwirkend auf früheren und nicht automatisch auf späteren. Ein neuer
+  // Frame (addFrame) übernimmt dagegen alles, was auf dem aktuellen steht.
+  function placeOnCurrentFrame(id, pos) {
+    const frame = state.frames[state.currentFrame];
+    if (frame) frame.pos[id] = pos;
+  }
+
+  // Blendet ein vorhandenes Element im aktuellen Frame ein (Position vom
+  // nächstgelegenen Frame, in dem es vorkommt: erst davor, dann danach).
+  function showElementOnFrame(id) {
+    const frame = state.frames[state.currentFrame];
+    if (!frame || frame.pos[id]) return;
+    let src = null;
+    for (let i = state.currentFrame - 1; i >= 0 && !src; i--) src = state.frames[i].pos[id];
+    for (let i = state.currentFrame + 1; i < state.frames.length && !src; i++) src = state.frames[i].pos[id];
+    frame.pos[id] = src ? { ...src } : computeDefaultElementPosition();
+    refreshAfterElementChange();
+  }
+
+  // Entfernt ein Element nur aus dem aktuellen Frame. Kommt es danach in
+  // keinem Frame mehr vor, wird es ganz entfernt.
+  function hideElementOnFrame(id) {
+    const frame = state.frames[state.currentFrame];
+    if (!frame || !frame.pos[id]) return;
+    delete frame.pos[id];
+    if (!state.frames.some((f) => f.pos[id])) removeElementById(id);
+    refreshAfterElementChange();
+  }
+
+  function refreshAfterElementChange() {
+    updateInspector();
+    rebuildFramesList();
+    rebuildLayersList();
+    render();
+  }
 
   // Raster um die Feldmitte, gestaffelt nach Anzahl vorhandener Elemente —
   // Standardposition für Elemente, die ohne Drop-Position entstehen.
@@ -6042,9 +6090,7 @@
     // nicht rückwirkend auftauchen (paintScene/interpPositions
     // behandeln ein fehlendes frame.pos[id] bereits korrekt als
     // "noch nicht vorhanden").
-    state.frames.forEach((frame, idx) => {
-      if (idx >= state.currentFrame) frame.pos[id] = { x: defX, y: defY };
-    });
+    placeOnCurrentFrame(id, { x: defX, y: defY });
 
     selectElement(id);
     rebuildFramesList();
@@ -6061,7 +6107,7 @@
   // editierbares label übernommen; rosterId ist nur zusätzliche
   // Metadaten für die Anzeige (siehe elementDisplayName) und ändert an
   // der bestehenden Spieler-Logik sonst nichts.
-  function addRosterPlayerToField(p, pct) {
+  function addRosterPlayerToField(p, pct, allFrames) {
     const id = uid('player');
     const el = {
       id,
@@ -6088,9 +6134,8 @@
     if (p.position1 === 'TW' || p.position2 === 'TW') el.isGoalkeeper = true;
     state.elements.push(el);
     // Nur ab dem aktuell angezeigten Frame platzieren, siehe addElement().
-    state.frames.forEach((frame, idx) => {
-      if (idx >= state.currentFrame) frame.pos[id] = { ...pct };
-    });
+    if (allFrames) state.frames.forEach((frame) => { frame.pos[id] = { ...pct }; });
+    else placeOnCurrentFrame(id, { ...pct });
     selectElement(id);
     rebuildFramesList();
     rebuildLayersList();
@@ -6195,7 +6240,7 @@
     if (hadFullStartelf) {
       const presentIds = new Set(linkedTeamAEls().map((el) => el.rosterId));
       roster.filter((p) => p.starting && !presentIds.has(p.id)).forEach((p) => {
-        addRosterPlayerToField(p, computeDefaultElementPosition());
+        addRosterPlayerToField(p, computeDefaultElementPosition(), true);
         changed = true;
       });
     }
@@ -6318,7 +6363,7 @@
     }
     state.elements.push(el);
     const anchorPos = metersToPos({ x: cx, y: cy });
-    for (const frame of state.frames) frame.pos[id] = { ...anchorPos };
+    placeOnCurrentFrame(id, { ...anchorPos });
 
     drawingMode = null;
     updateDrawingHint();
@@ -6387,7 +6432,7 @@
       x: clamp(basePos.x + PASTE_OFFSET, cropMinPercent + 3, cropMaxPercent - 3),
       y: clamp(basePos.y + PASTE_OFFSET, 6, 94),
     };
-    for (const frame of state.frames) frame.pos[newId] = { ...newPos };
+    placeOnCurrentFrame(newId, { ...newPos });
 
     selectElement(newId);
     rebuildFramesList();
@@ -6430,6 +6475,9 @@
     inspectorTitle.textContent = 'Element bearbeiten';
     inspectorEmpty.classList.add('hidden');
     inspectorForm.classList.remove('hidden');
+    const presentHere = !!(state.frames[state.currentFrame] && state.frames[state.currentFrame].pos[el.id]);
+    showElFrameBtn.classList.toggle('hidden', presentHere);
+    hideElFrameBtn.classList.toggle('hidden', !presentHere);
     deleteElBtn.textContent = el.type === 'ball' ? 'Ball entfernen'
       : el.type === 'marker' ? 'Markierung entfernen'
       : el.type === 'text' ? 'Textbox entfernen'
@@ -7036,6 +7084,8 @@
   wireCheckbox(lineBorderHiddenInput, (v) => withSelectedType('line', (el) => { el.borderHidden = v; }));
 
   deleteElBtn.addEventListener('click', deleteSelected);
+  showElFrameBtn.addEventListener('click', () => { if (state.selectedId) showElementOnFrame(state.selectedId); });
+  hideElFrameBtn.addEventListener('click', () => { if (state.selectedId) hideElementOnFrame(state.selectedId); });
 
   // A floating dropdown (like the color/element popovers), not an
   // inline block — expanding it must never push the pitch canvas down.
@@ -7169,7 +7219,9 @@
     const items = state.elements.slice().reverse();
     items.forEach((el) => {
       const row = document.createElement('div');
-      row.className = 'layer-row' + (el.id === state.selectedId ? ' selected' : '');
+      const presentHere = !!(state.frames[state.currentFrame] && state.frames[state.currentFrame].pos[el.id]);
+      row.className = 'layer-row' + (el.id === state.selectedId ? ' selected' : '') + (presentHere ? '' : ' layer-absent');
+      if (!presentHere) row.title = 'In diesem Frame nicht sichtbar — anklicken und im Menü „In diesem Frame einblenden“ wählen.';
       row.dataset.dragId = el.id;
 
       const handle = document.createElement('span');
@@ -7665,7 +7717,10 @@
     const out = {};
     for (const el of elementsList) {
       const a = fromFrame.pos[el.id], b = toFrame.pos[el.id];
-      if (!a || !b) { out[el.id] = a || b; continue; }
+      // Nur in einem der beiden Frames vorhanden: ein Element, das erst im
+      // Ziel-Frame auftaucht, erscheint beim Erreichen dieses Frames; eines,
+      // das im Ziel-Frame fehlt, bleibt bis zum Erreichen sichtbar.
+      if (!a || !b) { out[el.id] = a || undefined; continue; }
       const offsetFrac = getCurveOffset(el.id, segIndex === undefined ? 0 : segIndex);
       out[el.id] = curvedPointMeters(a, b, t, offsetFrac);
     }
