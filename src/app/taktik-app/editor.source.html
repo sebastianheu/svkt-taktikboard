@@ -1080,6 +1080,9 @@
   .folder-drag-ghost .folder-sub-item-name { text-decoration: none; }
   .folder-sub-item-clickable:hover { color: var(--accent-strong); background: var(--surface-2); text-decoration: underline; }
   .folder-sub-item-clickable:active { cursor: grabbing; }
+  /* Einfügemarke beim Sortieren per Drag & Drop innerhalb eines Ordners. */
+  .folder-sub-item.insert-before { box-shadow: inset 0 2px 0 var(--accent); }
+  .folder-sub-item.insert-after { box-shadow: inset 0 -2px 0 var(--accent); }
   .folder-add-btn { margin-top: 2px; }
 
   .menu-popover-check {
@@ -8223,6 +8226,33 @@
     return pool.filter((e) => Array.isArray(e.folderIds) && e.folderIds.includes(folderId));
   }
 
+  // Reihenfolge der GIFs innerhalb eines Ordners: entry.folderPos[folderId]
+  // (Zahl, aufsteigend). Einträge ohne Position kommen danach in der
+  // bisherigen Reihenfolge. Gilt auch für "Alle GIFs" (Schlüssel __all__).
+  function orderedEntriesInFolder(folderId) {
+    const items = entriesInFolder(folderId);
+    const pos = (e) => (e.folderPos && typeof e.folderPos[folderId] === 'number' ? e.folderPos[folderId] : Infinity);
+    return items
+      .map((e, i) => ({ e, i }))
+      .sort((a, b) => (pos(a.e) - pos(b.e)) || (a.i - b.i) || 0)
+      .map((x) => x.e);
+  }
+
+  function reorderInFolder(entryId, folderId, targetId, after) {
+    const ids = orderedEntriesInFolder(folderId).map((e) => e.id).filter((id) => id !== entryId);
+    const at = ids.indexOf(targetId);
+    if (at < 0) return false;
+    ids.splice(after ? at + 1 : at, 0, entryId);
+    ids.forEach((id, n) => {
+      const e = library.find((x) => x.id === id);
+      if (!e) return;
+      if (!e.folderPos || typeof e.folderPos !== 'object') e.folderPos = {};
+      e.folderPos[folderId] = n;
+    });
+    persistLibrary();
+    return true;
+  }
+
   function addEntryToFolder(entry, folderId) {
     const set = new Set(entry.folderIds || []);
     if (!set.has(folderId)) { set.add(folderId); entry.folderIds = Array.from(set); persistLibrary(); }
@@ -8314,7 +8344,7 @@
       if (expandedFolders.has(id)) {
         const sub = document.createElement('div');
         sub.className = 'folder-sub-list';
-        const items = entriesInFolder(id);
+        const items = orderedEntriesInFolder(id);
         if (items.length === 0) {
           const empty = document.createElement('div');
           empty.className = 'folder-sub-item';
@@ -8324,7 +8354,7 @@
           items.forEach((entry) => {
             const it = document.createElement('div');
             it.className = 'folder-sub-item folder-sub-item-clickable';
-            it.title = `${entry.name} — klicken zum Laden, ziehen zum Verschieben in einen anderen Ordner`;
+            it.title = `${entry.name} — klicken zum Laden, ziehen zum Sortieren oder zum Verschieben in einen anderen Ordner`;
             it.dataset.entryId = entry.id;
             it.dataset.folderId = id;
             if (gifSrc(entry.gif)) {
@@ -8436,10 +8466,34 @@
       folderPointerDrag.ghost.style.top = e.clientY + 'px';
     }
     e.preventDefault();
+    clearInsertMarks();
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
+    const slot = sortSlotAtPoint(e.clientX, e.clientY);
+    if (slot) {
+      slot.item.classList.add(slot.after ? 'insert-after' : 'insert-before');
+      return;
+    }
     const head = folderHeadAtPoint(e.clientX, e.clientY);
     if (head) head.classList.add('folder-drop-target');
   });
+
+  function clearInsertMarks() {
+    document.querySelectorAll('.folder-sub-item.insert-before, .folder-sub-item.insert-after')
+      .forEach((x) => x.classList.remove('insert-before', 'insert-after'));
+  }
+
+  // Liegt der Zeiger über einem anderen GIF desselben Ordners, in dem das
+  // gezogene GIF liegt, wird einsortiert (davor/danach je nach Hälfte).
+  function sortSlotAtPoint(x, y) {
+    if (!folderPointerDrag) return null;
+    const under = document.elementFromPoint(x, y);
+    const item = under && under.closest ? under.closest('.folder-sub-item-clickable') : null;
+    if (!item || !item.dataset.entryId) return null;
+    if (item.dataset.entryId === folderPointerDrag.entryId) return null;
+    if (item.dataset.folderId !== folderPointerDrag.fromFolderId) return null;
+    const r = item.getBoundingClientRect();
+    return { item, after: y > r.top + r.height / 2 };
+  }
 
   // Accepts a drop anywhere within a folder's row (header or its expanded
   // GIF list), not just the thin header strip — more forgiving to aim at.
@@ -8461,6 +8515,15 @@
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
     if (!active) { folderPointerDrag = null; return; }
     srcEl.classList.remove('drag-fading');
+    const slot = sortSlotAtPoint(e.clientX, e.clientY);
+    clearInsertMarks();
+    if (slot) {
+      const targetId = slot.item.dataset.entryId;
+      folderPointerDrag = null;
+      reorderInFolder(entryId, fromFolderId, targetId, slot.after);
+      renderFolderMenu();
+      return;
+    }
     const head = folderHeadAtPoint(e.clientX, e.clientY);
     folderPointerDrag = null;
     if (!head) return;
@@ -8479,6 +8542,7 @@
   document.addEventListener('pointercancel', () => {
     if (!folderPointerDrag) return;
     endFolderDragVisuals();
+    clearInsertMarks();
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
     folderPointerDrag.srcEl.classList.remove('drag-fading');
     folderPointerDrag = null;
