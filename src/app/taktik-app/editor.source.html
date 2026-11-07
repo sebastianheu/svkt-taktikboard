@@ -1625,6 +1625,10 @@
               </div>
             </div>
             <label class="field">
+              <span>Schriftgröße</span>
+              <input type="range" id="markerFontScaleInput" min="0.5" max="3" step="0.1">
+            </label>
+            <label class="field">
               <span>Linienstärke</span>
               <input type="range" id="markerStrokeWidthInput" min="0.4" max="3" step="0.1">
             </label>
@@ -1715,6 +1719,10 @@
                 </button>
               </div>
             </div>
+            <label class="field">
+              <span>Schriftgröße</span>
+              <input type="range" id="textFontScaleInput" min="0.5" max="3" step="0.1">
+            </label>
             <label class="field">
               <span>Linienstärke</span>
               <input type="range" id="textStrokeWidthInput" min="0.4" max="3" step="0.1">
@@ -2263,12 +2271,12 @@
   const TEXTBOX_LINE_HEIGHT_MULT = 1.3;
   const textMeasureCtx = document.createElement('canvas').getContext('2d');
 
-  function textBoxFontPx(scale) {
-    return Math.max(10, PLAYER_R_M * 1.05 * scale);
+  function textBoxFontPx(scale, el) {
+    return Math.max(10, PLAYER_R_M * 1.05 * scale) * ((el && el.fontScale) || 1);
   }
 
   function textBoxMetricsPx(el, scale) {
-    const fontPx = textBoxFontPx(scale);
+    const fontPx = textBoxFontPx(scale, el);
     textMeasureCtx.font = `700 ${fontPx}px Oswald, sans-serif`;
     const raw = (el.label || '').length ? el.label : 'Text';
     const lines = raw.split('\n');
@@ -3085,7 +3093,7 @@
         if (el.type === 'marker') {
           const { halfW, halfH } = markerHalfExtents(el);
           const avgHalf = (halfW + halfH) / 2;
-          fontPx = Math.max(9, avgHalf * 0.68 * view.scale);
+          fontPx = Math.max(9, avgHalf * 0.68 * view.scale) * (el.fontScale || 1);
           fillStyle = el.labelColor || COLORS.markerInk;
           dy = avgHalf * 0.2 * view.scale;
         } else {
@@ -3642,6 +3650,8 @@
   const playerFillSwatchBtn = document.getElementById('playerFillSwatchBtn');
   const playerFillPopover = document.getElementById('playerFillPopover');
   const markerStrokeWidthInput = document.getElementById('markerStrokeWidthInput');
+  const markerFontScaleInput = document.getElementById('markerFontScaleInput');
+  const textFontScaleInput = document.getElementById('textFontScaleInput');
   const markerFillHiddenInput = document.getElementById('markerFillHiddenInput');
   const markerBorderHiddenInput = document.getElementById('markerBorderHiddenInput');
   const textStrokeWidthInput = document.getElementById('textStrokeWidthInput');
@@ -6561,6 +6571,8 @@
       markerLabelSwatchBtn.style.background = labelC;
       markerStrokeWidthInput.value = el.strokeWidthMult == null ? 1 : el.strokeWidthMult;
       updateRangeFill(markerStrokeWidthInput);
+      markerFontScaleInput.value = el.fontScale == null ? 1 : el.fontScale;
+      updateRangeFill(markerFontScaleInput);
       markerFillHiddenInput.checked = !!el.fillHidden;
       markerBorderHiddenInput.checked = !!el.borderHidden;
     } else {
@@ -6641,6 +6653,8 @@
       updateRangeFill(textOpacityInput);
       textStrokeWidthInput.value = el.strokeWidthMult == null ? 1 : el.strokeWidthMult;
       updateRangeFill(textStrokeWidthInput);
+      textFontScaleInput.value = el.fontScale == null ? 1 : el.fontScale;
+      updateRangeFill(textFontScaleInput);
       textFillHiddenInput.checked = !!el.fillHidden;
       textBorderHiddenInput.checked = !!el.borderHidden;
     } else {
@@ -6832,6 +6846,10 @@
     }
   });
   markerLabelHexInput.addEventListener('blur', () => { markerLabelHexInput.value = markerLabelInput.value.toUpperCase(); });
+  markerFontScaleInput.addEventListener('input', () => {
+    updateRangeFill(markerFontScaleInput);
+    withSelectedMarker((el) => { el.fontScale = parseFloat(markerFontScaleInput.value); });
+  });
   markerStrokeWidthInput.addEventListener('input', () => {
     updateRangeFill(markerStrokeWidthInput);
     withSelectedMarker((el) => { el.strokeWidthMult = parseFloat(markerStrokeWidthInput.value); });
@@ -7025,6 +7043,10 @@
     textOpacityValue.textContent = textOpacityInput.value;
     updateRangeFill(textOpacityInput);
     withSelectedText((el) => { el.opacity = parseInt(textOpacityInput.value, 10); });
+  });
+  textFontScaleInput.addEventListener('input', () => {
+    updateRangeFill(textFontScaleInput);
+    withSelectedText((el) => { el.fontScale = parseFloat(textFontScaleInput.value); });
   });
   textStrokeWidthInput.addEventListener('input', () => {
     updateRangeFill(textStrokeWidthInput);
