@@ -1054,7 +1054,30 @@
     background: var(--surface-3);
     display: block;
   }
-  .folder-sub-item-clickable { cursor: grab; touch-action: none; }
+  .folder-sub-item-clickable { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+  /* Während ein GIF zwischen Ordnern gezogen wird, darf nichts markiert werden. */
+  body.folder-dragging, body.folder-dragging * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
+  /* "Schatten" des gezogenen GIFs, folgt dem Mauszeiger. */
+  .folder-drag-ghost {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 240px;
+    padding: 5px 10px 5px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+    opacity: 0.92;
+    transform: translate(12px, 10px) rotate(-2deg);
+  }
+  .folder-drag-ghost .folder-sub-item-name { text-decoration: none; }
   .folder-sub-item-clickable:hover { color: var(--accent-strong); background: var(--surface-2); text-decoration: underline; }
   .folder-sub-item-clickable:active { cursor: grabbing; }
   .folder-add-btn { margin-top: 2px; }
@@ -8377,6 +8400,10 @@
     };
   });
 
+  // Kein Text-/Elemente-Markieren, solange ein GIF gegriffen/gezogen wird.
+  document.addEventListener('selectstart', (e) => { if (folderPointerDrag) e.preventDefault(); });
+  document.addEventListener('dragstart', (e) => { if (folderPointerDrag) e.preventDefault(); });
+
   document.addEventListener('pointermove', (e) => {
     if (!folderPointerDrag) return;
     if (!folderPointerDrag.active) {
@@ -8389,6 +8416,24 @@
       // cursor mid-drag. A pure opacity fade keeps the layout — and every
       // header's position — stable for the rest of the drag.
       folderPointerDrag.srcEl.classList.add('drag-fading');
+      document.body.classList.add('folder-dragging');
+      const sel = window.getSelection && window.getSelection();
+      if (sel) sel.removeAllRanges();
+      const ghost = document.createElement('div');
+      ghost.className = 'folder-drag-ghost';
+      const thumb = folderPointerDrag.srcEl.querySelector('.folder-sub-thumb');
+      if (thumb) ghost.appendChild(thumb.cloneNode(true));
+      const label = document.createElement('span');
+      label.className = 'folder-sub-item-name';
+      const nameEl = folderPointerDrag.srcEl.querySelector('.folder-sub-item-name');
+      label.textContent = nameEl ? nameEl.textContent : '';
+      ghost.appendChild(label);
+      document.body.appendChild(ghost);
+      folderPointerDrag.ghost = ghost;
+    }
+    if (folderPointerDrag.ghost) {
+      folderPointerDrag.ghost.style.left = e.clientX + 'px';
+      folderPointerDrag.ghost.style.top = e.clientY + 'px';
     }
     e.preventDefault();
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
@@ -8404,8 +8449,14 @@
     return rowEl ? rowEl.querySelector('.folder-row-head') : null;
   }
 
+  function endFolderDragVisuals() {
+    document.body.classList.remove('folder-dragging');
+    if (folderPointerDrag && folderPointerDrag.ghost) folderPointerDrag.ghost.remove();
+  }
+
   document.addEventListener('pointerup', (e) => {
     if (!folderPointerDrag) return;
+    endFolderDragVisuals();
     const { entryId, fromFolderId, srcEl, active } = folderPointerDrag;
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
     if (!active) { folderPointerDrag = null; return; }
@@ -8427,6 +8478,7 @@
 
   document.addEventListener('pointercancel', () => {
     if (!folderPointerDrag) return;
+    endFolderDragVisuals();
     document.querySelectorAll('.folder-row-head.folder-drop-target').forEach((h) => h.classList.remove('folder-drop-target'));
     folderPointerDrag.srcEl.classList.remove('drag-fading');
     folderPointerDrag = null;
