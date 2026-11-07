@@ -7854,9 +7854,19 @@
     else startPlayback(pausedElapsedMs);
   });
 
+  // Von vorne: Läuft die Wiedergabe, startet sie neu und läuft weiter. War
+  // sie pausiert, springt sie nur an den Anfang (erstes Bild sichtbar) und
+  // bleibt pausiert, bis Play gedrückt wird. Ohne vorherige Wiedergabe
+  // startet sie wie bisher.
   restartBtn.addEventListener('click', () => {
+    const wasPaused = !state.playing && pausedElapsedMs > 0;
     if (state.playing) { state.playing = false; playState = null; }
     pausedElapsedMs = 0;
+    if (wasPaused) {
+      const segs = buildTimeline(loopToggle.checked);
+      if (segs.length) renderAtSegments(segs, 0);
+      return;
+    }
     startPlayback(0);
   });
 
