@@ -1,9 +1,13 @@
 # Changelog Taktikboard
 
-Stand: 08.11.2026 (Produktion = `main`, Commit `1f5118f` bzw. dieser Changelog-Commit).
+Stand: 10.11.2026 (Produktion = `main`).
 Zu jeder Änderung steht, **wie du sie prüfen kannst**. Mit ⚠️ markierte Punkte habe ich nur lokal/ohne echte Daten getestet.
 
 ## 1. Letzte Änderungen (Nov 2026)
+
+### Aufräumen (10.11.2026)
+- Einmalige Migrations-Route `/api/admin/migrate-gifs` entfernt (Migration war am 07.11. abgeschlossen: 8 Einträge, 0 Fehler). Der Code liegt weiter in der Git-Historie.
+- Prüfen: Nach dem Deploy liefert `/api/admin/migrate-gifs` 404; Editor, Bibliothek und GIF-Vorschauen funktionieren wie vorher.
 
 ### Schriftgröße für Texte in Elementen
 - Neuer Regler „Schriftgröße“ (0,5–3, Standard 1) bei Kreis/Viereck/Dreieck und Textboxen.
