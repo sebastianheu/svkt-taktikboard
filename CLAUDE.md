@@ -10,6 +10,8 @@ Produktion = Branch `main`, deployt automatisch über Vercel (Projekt `svkt-takt
 
 Funktionsumfang: Taktik-Editor mit Frames, Bibliothek mit Ordnern, Vorlagen mit Platzhaltern und Rollen-Zuteilung, Kader mit 10 Standard-Attributen, Partien-Bereich, GIF-Export.
 
+Am 10.11.2026 aufgeräumt: einmalige Migrations-Route `/api/admin/migrate-gifs` entfernt (deployt), alle gemergten Feature-Branches lokal und auf GitHub gelöscht (nur noch `main`). CLAUDE.md wird mit dem Skill `projektstand` (`.claude/skills/projektstand/`) gepflegt.
+
 ## Architektur (wichtig)
 
 - **Der Editor ist eine eigenständige HTML-Seite** `src/app/taktik-app/editor.source.html` (CSS + JS in einer Datei, kein Bundler), eingebettet per iframe unter `/taktik`. Sie wird als Base64 in `src/app/taktik-app/editorHtmlBase64.ts` ausgeliefert.
@@ -32,15 +34,18 @@ Funktionsumfang: Taktik-Editor mit Frames, Bibliothek mit Ordnern, Vorlagen mit 
 - Startelf-Abgleich nur beim Öffnen einer Taktik und nur für die geöffnete (nicht live, nicht für alle). Auffüllen nur, wenn die Taktik vorher 11 verknüpfte Spielerinnen hatte.
 - Änderungen immer erst auf eigenem Branch, dann nur nach ausdrücklicher Freigabe per Fast-Forward in `main`.
 - Der Spielfeldplatz wird im Hochformat gedreht gezeichnet (screenX folgt Meter-y, screenY folgt Meter-x), Text aufrecht. Das betrifft Textbox-Maße.
+- Der Projektstand wird in den vorhandenen Abschnitten dieser Datei gepflegt (Skill `projektstand`), nicht in einem eigenen Abschnitt; Details und Prüfhinweise stehen im `CHANGELOG.md`.
 
 ## Offene Punkte / nächste Schritte
 
-1. Im Vercel-Dashboard die Test-Variablen `AUTH_PASSCODE` und `AUTH_SECRET` (Preview, Branch `fast-origin-transfer`) löschen.
-2. Fast Origin Transfer über einige Tage unter Usage beobachten (Ziel: deutlich unter dem Hobby-Limit von 10 GB/Monat).
-3. Nach jedem Deploy alle offenen Editor-Tabs neu laden (veraltete Tabs können alten Stand zurückschreiben).
-4. Mit echten Daten prüfen (lokal nicht möglich): Abspielen/GIF-Export bei Elementen, die nur auf einzelnen Frames stehen; Drag & Drop mit echter Maus (Ordner sortieren/verschieben, Kader-Tausch); Kader-/Vorlagen-Abläufe.
-5. Optional später: Aufräumroutine für verwaiste Blob-Dateien (alte GIFs bleiben beim Neu-Erzeugen im Store liegen; 1 GB Speicher reicht lange, ca. 1 MB je GIF).
-6. Offen aus früheren Ideen: Automatische „beste Startelf für Standards“ als eigener Bericht ohne Vorlage; Rolle direkt in der Live-Ansicht tauschen.
+1. **(Nutzer)** Aktuelles Backup der Bibliothek ziehen und nach `..\svkt-taktikboard-backups\` legen. Letztes Backup: 07.11.2026 (vor der GIF-Migration); seitdem neue GIFs, Ordner-Sortierung, Schriftgrößen.
+2. **(Nutzer)** Im Vercel-Dashboard die Test-Variablen `AUTH_PASSCODE` und `AUTH_SECRET` (Preview, Branch `fast-origin-transfer`) löschen. Der Branch selbst ist schon gelöscht, die Variablen nicht. Der verbundene Vercel-MCP-Zugang sieht das Projekt nicht, daher nur im Dashboard möglich.
+3. **(Nutzer)** Fast Origin Transfer über einige Tage unter Usage beobachten (Ziel: deutlich unter dem Hobby-Limit von 10 GB/Monat).
+4. **(Nutzer)** Nach jedem Deploy alle offenen Editor-Tabs neu laden (veraltete Tabs können alten Stand zurückschreiben).
+5. Prüfrunde mit echten Daten (lokal nicht möglich), Claude bereitet eine Checkliste vor: Abspielen/GIF-Export bei Elementen, die nur auf einzelnen Frames stehen; Drag & Drop mit echter Maus (Ordner sortieren/verschieben, Kader-Tausch); Kader-/Vorlagen-Abläufe; sehr große Schrift in Markierungen (steht über die Form hinaus, ok so?).
+6. Vorschlag, nicht bestätigt: Versionsprüfung beim Speichern (Server lehnt Schreibzugriffe veralteter Tabs ab), damit Punkt 4 keine Gewohnheit mehr sein muss.
+7. Offen aus früheren Ideen: Rolle direkt in der Live-Ansicht tauschen; automatische „beste Startelf für Standards“ als eigener Bericht ohne Vorlage.
+8. Optional später: Aufräumroutine für verwaiste Blob-Dateien (alte GIFs bleiben beim Neu-Erzeugen im Store liegen; 1 GB Speicher reicht lange, ca. 1 MB je GIF).
 
 ## Sicherheit
 
