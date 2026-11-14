@@ -1,9 +1,13 @@
 # Changelog Taktikboard
 
-Stand: 10.11.2026 (Produktion = `main`).
+Stand: 14.11.2026 (Produktion = `main`).
 Zu jeder Änderung steht, **wie du sie prüfen kannst**. Mit ⚠️ markierte Punkte habe ich nur lokal/ohne echte Daten getestet.
 
 ## 1. Letzte Änderungen (Nov 2026)
+
+### Neue Vorlagen-Rolle „Manndeckung“ (14.11.2026)
+- Im Vorlagen-Modus gibt es bei Spieler-Icons die Standard-Rolle **Manndeckung**. Automatische Besetzung gewichtet: Zweikampf (3), Kopfball, Stärke, Schnelligkeit (je 2), Größe, Spielintelligenz (je 1).
+- Prüfen: Vorlage öffnen, Spieler-Icon auswählen → „Standard-Rolle“ → Manndeckung. „Vorlage anwenden“ → „Automatisch bestmöglich besetzen“ → zweikampf- und kopfballstarke Spielerin landet auf der Rolle.
 
 ### Aufräumen (10.11.2026)
 - Einmalige Migrations-Route `/api/admin/migrate-gifs` entfernt (Migration war am 07.11. abgeschlossen: 8 Einträge, 0 Fehler). Der Code liegt weiter in der Git-Historie.

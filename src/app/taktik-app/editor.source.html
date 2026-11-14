@@ -3904,6 +3904,9 @@
     kontersicherung: { speed: 2, gameIntelligence: 2, duels: 1 },
     kopfball: { heading: 3, height: 2, strength: 2, duels: 1 },
     vorne: { speed: 3, gameIntelligence: 1, finishing: 1 },
+    // Defensiv: klebt an einer Gegenspielerin, gewinnt Kopfball- und
+    // Laufduelle gegen sie.
+    manndeckung: { duels: 3, heading: 2, strength: 2, speed: 2, height: 1, gameIntelligence: 1 },
   };
 
   const STANDARD_ROLE_LABELS = {
@@ -3917,6 +3920,7 @@
     kontersicherung: 'Kontersicherung',
     kopfball: 'Kopfball',
     vorne: 'Vorne',
+    manndeckung: 'Manndeckung',
   };
   populatePlayerRoleSelect();
 
